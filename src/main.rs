@@ -17,6 +17,7 @@ use std::thread;
 
 mod bms_player;
 mod bms_loader;
+mod bms_parser;
 
 #[allow(dead_code)]
 fn play_sound(path: &'static str) {
