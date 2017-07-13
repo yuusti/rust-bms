@@ -1,3 +1,4 @@
+extern crate music;
 use piston::window::WindowSettings;
 use piston::event_loop::*;
 use piston::input::*;
@@ -9,6 +10,7 @@ use std::path::Path;
 use bms_loader::{self, Bms, Sound};
 use std::collections::{HashSet, HashMap};
 use ears;
+use ears::{AudioController};
 
 type Time = f64;
 
@@ -21,7 +23,7 @@ pub struct BmsPlayer<'a> {
     obj_index_by_key: HashMap<bms_loader::Key, usize>,
     event_index: usize,
     objects_by_key: HashMap<bms_loader::Key, Vec<Draw<'a>>>,
-    events: Vec<Event<'a>>,
+    events: Vec<Event>,
     judge_index_by_key: HashMap<bms_loader::Key, usize>,
     pushed_key_set: HashSet<bms_loader::Key>,
     judge_display: JudgeDisplay,
@@ -58,7 +60,7 @@ impl<'a> BmsPlayer<'a> {
     pub fn new(
         gl: GlGraphics,
         textures: &'a Textures,
-        bms: Bms<'a>,
+        bms: Bms,
         time: Time,
         speed: f64,
     ) -> BmsPlayer<'a> {
@@ -74,6 +76,7 @@ impl<'a> BmsPlayer<'a> {
                     objects_by_key.get_mut(&sound.key).unwrap().push(Draw { timing: sound.timing, x: x, width: width, height: NOTES_HEIGHT, texture: &texture });
                 }
             } else {
+                println!("A {} {}", sound.timing, &sound.wav_id.id);
                 events.push(Event { timing: sound.timing, event_type: EventType::PlaySound(sound) });
             }
         }
@@ -112,7 +115,10 @@ impl<'a> BmsPlayer<'a> {
 
     pub fn run(&mut self, window: &mut Window) {
         let mut events = Events::new(EventSettings::new());
+        //music::bind_sound_file(SoundX::A, "./a.wav");
 
+        music::set_volume(music::MAX_VOLUME);
+        //music::play_sound(&SoundX::A, music::Repeat::Times(1));
         while let Some(e) = events.next(window) {
             if let Some(r) = e.render_args() {
                 self.render(&r);
@@ -175,7 +181,10 @@ impl<'a> BmsPlayer<'a> {
                     EventType::ChangeBpm(ref x) => {
                         self.bpm = *x;
                     }
-                    EventType::PlaySound(ref snd) => (),
+                    EventType::PlaySound(ref snd) => {
+                        println!("B {}", &snd.wav_id.id);
+                        music::play_sound(&snd.wav_id, music::Repeat::Times(0));
+                    }
                 }
             } else {
                 break;
@@ -301,14 +310,14 @@ impl<'a> BmsPlayer<'a> {
     }
 }
 
-struct Event<'a> {
+struct Event {
     timing: Time,
-    event_type: EventType<'a>
+    event_type: EventType
 }
 
-enum EventType<'a> {
+enum EventType {
     ChangeBpm(f64),
-    PlaySound(bms_loader::Sound<'a>)
+    PlaySound(bms_loader::Sound)
 }
 
 #[derive(Clone)]
