@@ -3,6 +3,8 @@ extern crate graphics;
 extern crate glutin_window;
 extern crate opengl_graphics;
 extern crate ears;
+extern crate regex;
+
 
 use piston::window::WindowSettings;
 use piston::event_loop::*;
