@@ -18,6 +18,7 @@ use std::thread;
 mod bms_player;
 mod bms_loader;
 
+#[allow(dead_code)]
 fn play_sound(path: &'static str) {
     print!("{}", path);
     thread::spawn(move || {
@@ -46,8 +47,8 @@ fn main() {
         .unwrap();
 
     let texture = Texture::from_path(Path::new("resource/a.png")).unwrap();
-    let bg = Texture::from_path(Path::new("resource/b.png")).unwrap();
-    let x = Texture::from_path(Path::new("resource/c.png")).unwrap();
+    let bg = Texture::from_path(Path::new("resource/a.png")).unwrap();
+    let x = Texture::from_path(Path::new("resource/a.png")).unwrap();
 
     let loader = bms_loader::FixtureLoader{};
 
@@ -62,9 +63,6 @@ fn main() {
         1.0
     );
 
-    let mut events = Events::new(EventSettings::new());
-
-    play_sound("resource/loop.wav");
-    let mut xx = 0;
-
+//    play_sound("resource/loop.wav");
+    bms_player.run(&mut window);
 }

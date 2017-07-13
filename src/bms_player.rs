@@ -66,7 +66,10 @@ impl BmsPlayer {
 
         let background = &self.background_texture;
         let bars = &self.chart.bars;
-        const WHITE: [f32; 4] = [1.0, 0.0, 0.0, 1.0];
+        const RED: [f32; 4] = [1.0, 0.0, 0.0, 1.0];
+        const WHITE: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
+        const BLUE: [f32; 4] = [0.0, 0.0, 1.0, 1.0];
+        const BLACK: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
         let sp = self.sp;
         let time = self.time;
         let bpm = self.chart.bpm;
@@ -82,12 +85,31 @@ impl BmsPlayer {
                 let i = i as f64;
                 let sp = sp * height;
                 let h = height + time * sp - i * sp * 240.0 / bpm;
-                rectangle(WHITE, rectangle::rectangle_by_corners(0.0, 0.0, args.width as f64, 5.0),
+                rectangle(BLACK, rectangle::rectangle_by_corners(0.0, 0.0, args.width as f64, 5.0),
                           c.transform.trans(0.0, h), gl);
             }
 
             // TODO: notes
             for bar in bars {
+                // only drawing 1p notes
+                let pos = match bar.ch {
+                    16 => 0,
+                    18 => 6,
+                    19 => 7,
+                    _ => bar.ch - 10
+                };
+
+                if !(0 <= pos && pos <= 7) {
+                    continue;
+                }
+                let color = if pos == 0 {RED} else if pos % 2 == 1 {WHITE} else {BLUE};
+                for note in &bar.notes {
+                    let sp = sp * height;
+                    let h = height + time * sp - note.0 * sp * 240.0 / bpm;
+                    let w = 30.0;
+                    rectangle(color, rectangle::rectangle_by_corners(0.0, 0.0, 30.0, 5.0),
+                              c.transform.trans(w * pos as f64, h), gl);
+                }
             }
 
             // TODO: judge
