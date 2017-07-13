@@ -1,13 +1,14 @@
 use ears;
 use rand::{self, Rng};
 use bms_parser::{BmsParser, BmsFileParser, BmsScript};
+use std::collections::HashSet;
 
 pub struct KeyMetadata {
     id: u32,
     channel: String,
 }
 
-#[derive(Copy, Clone, Hash, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
 pub enum Key {
     P1_KEY1 = 1,
     P1_KEY2 = 2,
@@ -22,7 +23,7 @@ pub enum Key {
 }
 
 impl Key {
-    pub fn visible_keys() -> Vec<Key> {
+    pub fn visible_keys() -> HashSet<Key> {
         vec![Key::P1_KEY1,
              Key::P1_KEY2,
              Key::P1_KEY3,
@@ -30,7 +31,7 @@ impl Key {
              Key::P1_KEY5,
              Key::P1_KEY6,
              Key::P1_KEY7,
-             Key::P1_SCRATCH]
+             Key::P1_SCRATCH].into_iter().collect()
     }
 }
 

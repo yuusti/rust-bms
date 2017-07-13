@@ -7,7 +7,7 @@ use graphics::rectangle::square;
 
 use std::path::Path;
 use bms_loader::{self, Bms, Sound};
-use std::collections::HashMap;
+use std::collections::{HashSet, HashMap};
 use ears;
 
 type Time = f64;
@@ -22,6 +22,8 @@ pub struct BmsPlayer<'a> {
     event_index: usize,
     objects_by_key: HashMap<bms_loader::Key, Vec<Draw<'a>>>,
     events: Vec<Event<'a>>,
+    judge_index_by_key: HashMap<bms_loader::Key, usize>,
+    pushed_key_set: HashSet<bms_loader::Key>,
 }
 
 #[inline]
@@ -66,9 +68,9 @@ impl<'a> BmsPlayer<'a> {
 
         let mut events = vec![];
         for sound in bms.sounds {
-            if objects_by_key.contains_key(&sound.key) {
+            if bms_loader::Key::visible_keys().contains(&sound.key) {
                 if let Some((x, width, texture)) = note_info(&textures, sound.key) {
-                    objects_by_key.get_mut(&sound.key).unwrap().push(Draw {timing: sound.timing, x: x, width: width, height: NOTES_HEIGHT, texture: &texture });
+                    objects_by_key.get_mut(&sound.key).unwrap().push(Draw { timing: sound.timing, x: x, width: width, height: NOTES_HEIGHT, texture: &texture });
                 }
             } else {
                 events.push(Event { timing: sound.timing, event_type: EventType::PlaySound(sound) });
@@ -77,7 +79,7 @@ impl<'a> BmsPlayer<'a> {
 
         objects_by_key.insert(bms_loader::Key::BACK_CHORUS, vec![]);
         for bar in bms.bars.iter() {
-            objects_by_key.get_mut(&bms_loader::Key::BACK_CHORUS).unwrap().push(Draw {timing: *bar, x: 0.0, width: 1000.0, height: BAR_HEIGHT, texture: &textures.background });
+            objects_by_key.get_mut(&bms_loader::Key::BACK_CHORUS).unwrap().push(Draw { timing: *bar, x: 0.0, width: 1000.0, height: BAR_HEIGHT, texture: &textures.background });
         }
 
         let mut obj_index_by_key = HashMap::new();
@@ -97,10 +99,12 @@ impl<'a> BmsPlayer<'a> {
             time: time,
             speed: speed,
             bpm: 130f64,
-            obj_index_by_key: obj_index_by_key,
+            obj_index_by_key: obj_index_by_key.clone(),
             event_index: 0usize,
             objects_by_key: objects_by_key,
             events: events,
+            judge_index_by_key: obj_index_by_key.clone(),
+            pushed_key_set: HashSet::new()
         }
     }
 
@@ -145,12 +149,13 @@ impl<'a> BmsPlayer<'a> {
         for (key, objects) in &self.objects_by_key {
             let start = *self.obj_index_by_key.get(key).unwrap();
             let mut next_start = start;
-            for draw in objects {
-                let y = height - Self::calc_pos(draw.timing, self.time, self.bpm, self.speed);
-                drawings.push(DrawInfo { x: draw.x, y: y, width: draw.width, height: draw.height, texture: draw.texture });
+            for draw in &objects[start..objects.len()] {
+                let y = height - NOTES_HEIGHT - Self::calc_pos(draw.timing, self.time, self.bpm, self.speed);
 
                 if y > height {
                     next_start += 1;
+                } else {
+                    drawings.push(DrawInfo { x: draw.x, y: y, width: draw.width, height: draw.height, texture: draw.texture });
                 }
                 if y < 0.0 {
                     break;
@@ -187,10 +192,8 @@ impl<'a> BmsPlayer<'a> {
             // drawable objects
             for draw in &drawings {
                 let image = Image::new().rect(rectangle::rectangle_by_corners(0.0, 0.0, draw.width, draw.height));
-                image.draw(draw.texture, &DrawState::new_alpha(), c.transform.trans(draw.x, draw.y), gl);
+                image.draw(draw.texture, &DrawState::new_alpha(), c.transform.trans(draw.x, draw.y - draw.height / 2.0), gl);
             }
-
-            // TODO: judge?
         });
     }
 
@@ -199,13 +202,82 @@ impl<'a> BmsPlayer<'a> {
         if self.bpm < 1.0 {
             self.bpm = 1.0;
         }
+
+        // update judge
     }
 
     fn on_key_down(&mut self, key: &Key) {
-        self.speed += 10.0;
+        let down = match *key {
+            Key::A => Some(bms_loader::Key::P1_SCRATCH),
+            Key::Z => Some(bms_loader::Key::P1_KEY1),
+            Key::S => Some(bms_loader::Key::P1_KEY2),
+            Key::X => Some(bms_loader::Key::P1_KEY3),
+            Key::D => Some(bms_loader::Key::P1_KEY4),
+            Key::C => Some(bms_loader::Key::P1_KEY5),
+            Key::F => Some(bms_loader::Key::P1_KEY6),
+            Key::V => Some(bms_loader::Key::P1_KEY7),
+            Key::Up => {
+                self.speed += 10.0;
+                None
+            }
+            Key::Down => {
+                self.speed -= 10.0;
+                None
+            }
+            _ => None,
+        };
+
+        // judge
+        if let Some(note_key) = down {
+            if !self.pushed_key_set.contains(&note_key) {
+                self.pushed_key_set.insert(note_key);
+                println!("key {:?} pressed", note_key);
+
+                while let Some(mut index) = self.judge_index_by_key.get_mut(&note_key) {
+                    if let Some(draw) = self.objects_by_key[&note_key].get(*index) {
+                        let timing = draw.timing;
+                        if self.time <= timing + 0.1 {
+                            let time_diff = timing - self.time;
+                            println!("timing={} ({})", time_diff, if time_diff < 0.0 { "SLOW" } else { "FAST" });
+                            if let Some(judge) = Judge::get_judge(f64::abs(time_diff)) {
+                                println!("{:?}", judge);
+                                *index += 1;
+                            }
+                            break;
+                        }
+                    }
+                    *index += 1;
+                }
+            }
+        }
+
     }
 
-    fn on_key_up(&mut self, key: &Key) {}
+    fn on_key_up(&mut self, key: &Key) {
+        let up = match *key {
+            Key::A => Some(bms_loader::Key::P1_SCRATCH),
+            Key::Z => Some(bms_loader::Key::P1_KEY1),
+            Key::S => Some(bms_loader::Key::P1_KEY2),
+            Key::X => Some(bms_loader::Key::P1_KEY3),
+            Key::D => Some(bms_loader::Key::P1_KEY4),
+            Key::C => Some(bms_loader::Key::P1_KEY5),
+            Key::F => Some(bms_loader::Key::P1_KEY6),
+            Key::V => Some(bms_loader::Key::P1_KEY7),
+            Key::Up => {
+                self.speed += 10.0;
+                None
+            }
+            Key::Down => {
+                self.speed -= 10.0;
+                None
+            }
+            _ => None,
+        };
+
+        if let Some(key) = up {
+            self.pushed_key_set.remove(&key);
+        }
+    }
 }
 
 struct Event<'a> {
@@ -241,4 +313,34 @@ pub struct Textures {
     pub note_blue: Texture,
     pub note_red: Texture,
     pub note_white: Texture,
+}
+
+
+#[derive(Debug)]
+enum Judge {
+    PGREAT,
+    GREAT,
+    GOOD,
+    BAD,
+    POOR,
+}
+
+impl Judge {
+    fn get_judge(d: f64) -> Option<Judge> {
+        if d < 0.1 {
+            Some(if d < 0.02 {
+                Judge::PGREAT
+            } else if d < 0.03 {
+                Judge::GREAT
+            } else if d < 0.05 {
+                Judge::GOOD
+            } else if d < 0.08 {
+                Judge::BAD
+            } else {
+                Judge::POOR
+            })
+        } else {
+            None
+        }
+    }
 }
