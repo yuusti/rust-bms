@@ -14,9 +14,9 @@ use std::path::Path;
 use ears::{Sound, AudioController};
 use std::thread;
 
+mod bms_parser;
 mod bms_player;
 mod bms_loader;
-mod bms_parser;
 
 use bms_player::Textures;
 
