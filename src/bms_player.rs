@@ -6,9 +6,10 @@ use opengl_graphics::{GlGraphics, OpenGL, Texture};
 use graphics::rectangle::square;
 
 use std::path::Path;
-use bms_loader::{self, Bms, Sound};
+use bms_loader::{self, Bms, Sound, Wavs};
 use std::collections::HashMap;
 use ears;
+use ears::{AudioController};
 
 type Time = f64;
 
@@ -21,7 +22,8 @@ pub struct BmsPlayer<'a> {
     obj_index_by_key: HashMap<bms_loader::Key, usize>,
     event_index: usize,
     objects_by_key: HashMap<bms_loader::Key, Vec<Draw<'a>>>,
-    events: Vec<Event<'a>>,
+    events: Vec<Event>,
+    wavs: Wavs,
 }
 
 #[inline]
@@ -55,7 +57,7 @@ impl<'a> BmsPlayer<'a> {
     pub fn new(
         gl: GlGraphics,
         textures: &'a Textures,
-        bms: Bms<'a>,
+        bms: Bms,
         time: Time,
         speed: f64,
     ) -> BmsPlayer<'a> {
@@ -66,11 +68,13 @@ impl<'a> BmsPlayer<'a> {
 
         let mut events = vec![];
         for sound in bms.sounds {
+            println!("Z {:?}", sound.key);
             if objects_by_key.contains_key(&sound.key) {
                 if let Some((x, width, texture)) = note_info(&textures, sound.key) {
                     objects_by_key.get_mut(&sound.key).unwrap().push(Draw {timing: sound.timing, x: x, width: width, height: NOTES_HEIGHT, texture: &texture });
                 }
             } else {
+                println!("A {} {}", sound.timing, &sound.wav_id);
                 events.push(Event { timing: sound.timing, event_type: EventType::PlaySound(sound) });
             }
         }
@@ -101,6 +105,7 @@ impl<'a> BmsPlayer<'a> {
             event_index: 0usize,
             objects_by_key: objects_by_key,
             events: events,
+            wavs: bms.wavs,
         }
     }
 
@@ -168,7 +173,14 @@ impl<'a> BmsPlayer<'a> {
                     EventType::ChangeBpm(ref x) => {
                         self.bpm = *x;
                     }
-                    EventType::PlaySound(ref snd) => (),
+                    EventType::PlaySound(ref snd) => {
+                        println!("B {}", &snd.wav_id);
+                        self.wavs.get_mut(&snd.wav_id).map(|mut x| x.play());
+                        // match w {
+                        //     Some (ref mut x) => { x.play(); }
+                        //     None => {}
+                        // }
+                    }
                 }
             } else {
                 break;
@@ -208,14 +220,14 @@ impl<'a> BmsPlayer<'a> {
     fn on_key_up(&mut self, key: &Key) {}
 }
 
-struct Event<'a> {
+struct Event {
     timing: Time,
-    event_type: EventType<'a>
+    event_type: EventType
 }
 
-enum EventType<'a> {
+enum EventType {
     ChangeBpm(f64),
-    PlaySound(bms_loader::Sound<'a>)
+    PlaySound(bms_loader::Sound)
 }
 
 #[derive(Clone)]

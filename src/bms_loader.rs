@@ -1,13 +1,18 @@
 use ears;
 use rand::{self, Rng};
 use bms_parser::{BmsParser, BmsFileParser, BmsScript};
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+
+type Wav = ears::Sound;
+pub type Wavs = HashMap<String, Wav>;
 
 pub struct KeyMetadata {
     id: u32,
     channel: String,
 }
 
-#[derive(Copy, Clone, Hash, Eq, PartialEq)]
+#[derive(Copy, Clone, Hash, Eq, PartialEq, Debug)]
 pub enum Key {
     P1_KEY1 = 1,
     P1_KEY2 = 2,
@@ -49,27 +54,26 @@ fn channel_of_key(key: &Key) -> &'static str {
     }
 }
 
-static MEANINGLESS_HANDLE: i32 = 1;
-
-pub struct Sound<'a> {
+pub struct Sound {
     pub key: Key,
     pub timing: f64,
-    pub handle: &'a i32,
+    pub wav_id: String,
 }
 
-//pub struct Sound<'a> {
+// pub struct Sound<'a> {
 //    pub key: Key,
 //    pub timing: f64,
 //    pub handle: &'a ears::Sound,
-//}
+// }
 
 pub struct BpmChange {
     pub timing: f64,
     pub bpm: f64,
 }
 
-pub struct Bms<'a> {
-    pub sounds: Vec<Sound<'a>>,
+pub struct Bms {
+    pub wavs: Wavs,
+    pub sounds: Vec<Sound>,
     pub bars: Vec<f64>,  // time for bar line to pass the judge line relative to start time in sec.
     pub bpms: Vec<BpmChange>,
 }
@@ -136,6 +140,17 @@ impl BmsLoader for BmsFileLoader {
             Key::P1_SCRATCH,
         ];
 
+        let path_path = Path::new(&self.path);
+        let mut wavs: Wavs = HashMap::new();
+        for (key, value) in script.headers() {
+            if key.starts_with("WAV") {
+                println!("{} {}", &value, path_path.with_file_name(&value).with_extension("ogg").as_path().to_str().unwrap());
+                if let Some (snd) = ears::Sound::new(path_path.with_file_name(&value).with_extension("ogg").as_path().to_str().unwrap()) {
+                    wavs.insert(key[3..5].to_owned(), snd);
+                }
+            }
+        }
+
         // parse from beginning
         let mut current_bpm = initial_bpm;
         let mut segment_head: f64 = 0.;
@@ -162,12 +177,12 @@ impl BmsLoader for BmsFileLoader {
                 let notes_interval = segment_duration / (notes as f64);
 
                 for idx in 0..notes {
-                    let wav_id = &channel_commands[2*idx..(2*idx + 2)]; // TODO: use this.
+                    let wav_id = &channel_commands[2*idx..(2*idx + 2)];
                     let timing = segment_head + (idx as f64) * notes_interval;
 
                     if wav_id != "00" {
                         println!("{} {}", wav_id, timing);
-                        sounds.push(Sound { key: *key, timing: timing, handle: &MEANINGLESS_HANDLE });
+                        sounds.push(Sound {key: Key::BACK_CHORUS, timing: timing, wav_id: wav_id.to_owned()});
                     }
                 };
             };
@@ -177,7 +192,7 @@ impl BmsLoader for BmsFileLoader {
 
         println!("notes: {}", sounds.len());
 
-        Bms { bpms: bpms, bars: bars, sounds: sounds }
+        Bms { wavs: wavs, bpms: bpms, bars: bars, sounds: sounds }
     }
 }
 
@@ -205,15 +220,18 @@ impl BmsLoader for FixtureLoader {
         let mut rng = rand::thread_rng();
 
         let mut v = vec![];
+        let mut wavs: Wavs = HashMap::new();
+        //wavs.insert("01".to_owned(), None);
         for i in 0..10000 {
             v.push(
-                Sound { key: keys[i % keys.len()], timing: rng.gen_range(1f64, 1000f64), handle: &self.i },
+                Sound { key: keys[i % keys.len()], timing: rng.gen_range(1f64, 1000f64), wav_id: "01".to_owned() },
             )
         }
         v.sort_by(|a, b| a.timing.partial_cmp(&b.timing).unwrap());
 
         use std::f64;
         Bms {
+            wavs: wavs,
             sounds: v,
             bars: (0..1000i64).map(|x| x as f64).collect(),
             bpms: (0..100000i64).map(|x| BpmChange { timing: x as f64 / 100.0, bpm: 201.0 + 200.0 * ((x as f64 / 100.0 % (f64::consts::PI * 2.0)).sin()) }).collect()
