@@ -5,6 +5,7 @@ use glutin_window::GlutinWindow as Window;
 use opengl_graphics::{GlGraphics, OpenGL, Texture};
 use graphics::rectangle::square;
 
+use std::path::Path;
 use bms_loader::{self, Bms, Sound};
 use ears;
 
@@ -12,15 +13,13 @@ type Time = f64;
 
 pub struct BmsPlayer<'a> {
     gl: GlGraphics,
-    notes_texture: Texture,
-    background_texture: Texture,
-    judge: Texture,
+    textures: &'a Textures,
     time: Time,
     speed: f64,
     bpm: f64,
     obj_index: usize,
     event_index: usize,
-    objects: Vec<Draw>,
+    objects: Vec<Draw<'a>>,
     events: Vec<Event<'a>>,
 }
 
@@ -50,36 +49,36 @@ fn assigned_key(key: bms_loader::Key) -> bool {
 }
 
 #[inline]
-fn note_info(key: bms_loader::Key) -> Option<(f64, f64, Color)> {
+fn note_info(textures: &Textures, key: bms_loader::Key) -> Option<(f64, f64, &Texture)> {
     // x pos, size, color
     use bms_loader::Key;
     let x = key as u8;
-    const SCR: f64 = 100f64;
-    const KEY: f64 = 60f64;
 
     match key {
         Key::P1_KEY1 | Key::P1_KEY3 | Key::P1_KEY5 | Key::P1_KEY7 => {
-            Some((SCR + KEY * ((x - 1) as f64), KEY, Color::WHITE))
+            Some((SCR_WIDTH + NOTES1_WIDTH * (x / 2) as f64 + NOTES2_WIDTH * ((x - 1) / 2) as f64 + OFFSET, NOTES1_WIDTH - OFFSET * 2.0, &textures.note_white))
         }
         Key::P1_KEY2 | Key::P1_KEY4 | Key::P1_KEY6 => {
-            Some((SCR + KEY * ((x - 1) as f64), KEY, Color::BLUE))
+            Some((SCR_WIDTH + NOTES1_WIDTH * (x / 2) as f64 + NOTES2_WIDTH * ((x - 1) / 2) as f64 + OFFSET, NOTES2_WIDTH - OFFSET * 2.0, &textures.note_blue))
         }
         Key::P1_SCRATCH => {
-            Some((0f64, SCR, Color::RED))
+            Some((OFFSET, SCR_WIDTH - OFFSET * 2.0, &textures.note_red))
         }
         _ => None,
     }
 }
 
-const NOTES_HEIGHT: f64 = 5.0;
+const SCR_WIDTH: f64 = 108f64;
+const NOTES1_WIDTH: f64 = 60f64;
+const NOTES2_WIDTH: f64 = 50f64;
+const NOTES_HEIGHT: f64 = 10.0;
 const BAR_HEIGHT: f64 = 1.0;
+const OFFSET: f64 = 2.5;
 
 impl<'a> BmsPlayer<'a> {
     pub fn new(
         gl: GlGraphics,
-        notes_texture: Texture,
-        background_texture: Texture,
-        judge: Texture,
+        textures: &'a Textures,
         bms: Bms<'a>,
         time: Time,
         speed: f64,
@@ -88,8 +87,8 @@ impl<'a> BmsPlayer<'a> {
         let mut events = vec![];
         for sound in bms.sounds {
             if assigned_key(sound.key) {
-                if let Some((x, width, color)) = note_info(sound.key) {
-                    objects.push(Draw { key: Some(sound.key), timing: sound.timing, x: x, width: width, height: NOTES_HEIGHT, color: color });
+                if let Some((x, width, texture)) = note_info(&textures, sound.key) {
+                    objects.push(Draw { key: Some(sound.key), timing: sound.timing, x: x, width: width, height: NOTES_HEIGHT, texture: &texture });
                 }
             } else {
                 events.push(Event { timing: sound.timing, event_type: EventType::PlaySound(sound) });
@@ -97,7 +96,7 @@ impl<'a> BmsPlayer<'a> {
         }
 
         for bar in bms.bars.iter() {
-            objects.push(Draw { key: None, timing: *bar, x: 0.0, width: 1000.0, height: BAR_HEIGHT, color: Color::GREY });
+            objects.push(Draw { key: None, timing: *bar, x: 0.0, width: 1000.0, height: BAR_HEIGHT, texture: &textures.background });
         }
 
         for bpm in bms.bpms.iter() {
@@ -107,11 +106,10 @@ impl<'a> BmsPlayer<'a> {
         objects.sort_by(|a, b| a.timing.partial_cmp(&b.timing).unwrap());
         events.sort_by(|a, b| a.timing.partial_cmp(&b.timing).unwrap());
 
+
         BmsPlayer {
             gl: gl,
-            notes_texture: notes_texture,
-            background_texture: background_texture,
-            judge: judge,
+            textures: textures,
             time: time,
             speed: speed,
             bpm: 130f64,
@@ -149,23 +147,13 @@ impl<'a> BmsPlayer<'a> {
         (arrival_time - current_time) * bpm / 240f64 * speed
     }
 
-    fn calc_bar_pos(&self, bars: &[f64], judge_line: f64) -> Vec<f64> {
-        bars.into_iter().map(|t|
-            judge_line - Self::calc_pos(*t, self.time, self.bpm, self.speed)
-        ).collect()
-    }
-
-    fn calc_note_pos(&self, sounds: &[Sound], judge_line: f64) -> Vec<(bms_loader::Key, f64)> {
-        sounds.into_iter().map(|s| {
-            (s.key, judge_line - Self::calc_pos(s.timing, self.time, self.bpm, self.speed))
-        }).collect()
-    }
-
     fn render(&mut self, args: &RenderArgs) {
         use graphics::*;
 
-        let background = &self.background_texture;
+        let background = &self.textures.background;
+        let lane_bg = &self.textures.lane_bg;
 
+        let width = args.width as f64;
         let height = args.height as f64;
 
         // drawable objects
@@ -173,7 +161,7 @@ impl<'a> BmsPlayer<'a> {
         let start = self.obj_index;
         for draw in &self.objects[start..self.objects.len()] {
             let y = height - Self::calc_pos(draw.timing, self.time, self.bpm, self.speed);
-            drawings.push(DrawInfo { x: draw.x, y: y, width: draw.width, height: draw.height, color: draw.color });
+            drawings.push(DrawInfo { x: draw.x, y: y, width: draw.width, height: draw.height, texture: draw.texture });
 
             if y > height {
                 self.obj_index += 1;
@@ -189,14 +177,17 @@ impl<'a> BmsPlayer<'a> {
 
         self.gl.draw(args.viewport(), |c, gl| {
             // back ground
-            // TODO: use rectangle
-            let image = Image::new().rect(square(0.0, 0.0, args.width as f64));
+            let image = Image::new().rect(rectangle::rectangle_by_corners(0.0, 0.0, width, height));
             image.draw(background, &DrawState::new_alpha(), c.transform, gl);
+
+            // lanes
+            let image = Image::new().rect(rectangle::rectangle_by_corners(0.0, 0.0, SCR_WIDTH + NOTES1_WIDTH * 4.0 + NOTES2_WIDTH * 3.0, height));
+            image.draw(lane_bg, &DrawState::new_alpha(), c.transform, gl);
 
             // drawable objects
             for draw in &drawings {
-                rectangle(draw.color.value(), rectangle::rectangle_by_corners(0.0, 0.0, draw.width, draw.height),
-                          c.transform.trans(draw.x, draw.y), gl);
+                let image = Image::new().rect(rectangle::rectangle_by_corners(0.0, 0.0, draw.width, draw.height));
+                image.draw(draw.texture, &DrawState::new_alpha(), c.transform.trans(draw.x, draw.y), gl);
             }
 
             // events
@@ -228,19 +219,27 @@ enum EventType<'a> {
 }
 
 #[derive(Clone)]
-struct Draw {
+struct Draw<'a> {
     pub key: Option<bms_loader::Key>,
     pub timing: Time,
     pub x: f64,
     pub width: f64,
     pub height: f64,
-    pub color: Color
+    pub texture: &'a Texture,
 }
 
-struct DrawInfo {
+struct DrawInfo<'a> {
     pub x: f64,
     pub y: f64,
     pub width: f64,
     pub height: f64,
-    pub color: Color
+    pub texture: &'a Texture,
+}
+
+pub struct Textures {
+    pub background: Texture,
+    pub lane_bg: Texture,
+    pub note_blue: Texture,
+    pub note_red: Texture,
+    pub note_white: Texture,
 }

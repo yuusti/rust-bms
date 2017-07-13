@@ -7,11 +7,8 @@ extern crate rand;
 extern crate regex;
 
 use piston::window::WindowSettings;
-use piston::event_loop::*;
-use piston::input::*;
 use glutin_window::GlutinWindow as Window;
 use opengl_graphics::{GlGraphics, OpenGL, Texture};
-use graphics::rectangle::square;
 use std::path::Path;
 
 use ears::{Sound, AudioController};
@@ -20,6 +17,8 @@ use std::thread;
 mod bms_player;
 mod bms_loader;
 mod bms_parser;
+
+use bms_player::Textures;
 
 #[allow(dead_code)]
 fn play_sound(path: &'static str) {
@@ -49,18 +48,21 @@ fn main() {
         .build()
         .unwrap();
 
-    let texture = Texture::from_path(Path::new("resource/a.png")).unwrap();
-    let bg = Texture::from_path(Path::new("resource/a.png")).unwrap();
-    let x = Texture::from_path(Path::new("resource/a.png")).unwrap();
+    // load textures here temporarily
+    let textures = bms_player::Textures {
+        background: Texture::from_path(Path::new("resource/background.png")).unwrap(),
+        lane_bg: Texture::from_path(Path::new("resource/lane_bg.png")).unwrap(),
+        note_blue: Texture::from_path(Path::new("resource/note_blue.png")).unwrap(),
+        note_red: Texture::from_path(Path::new("resource/note_red.png")).unwrap(),
+        note_white: Texture::from_path(Path::new("resource/note_white.png")).unwrap(),
+    };
 
     let loader = bms_loader::FixtureLoader::new();
 
     use bms_loader::BmsLoader;
     let mut bms_player = bms_player::BmsPlayer::new(
         GlGraphics::new(opengl),
-        texture,
-        bg,
-        x,
+        &textures,
         loader.load(),
         0.0,
         200.0
