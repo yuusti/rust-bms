@@ -24,7 +24,6 @@ impl BmsScript {
 
     pub fn channel(&self, segment_id: &str, channel_id: &str) -> &str {
         let key = format!("{0}{1}", segment_id, channel_id);
-        println!("{}", key);
         self.channels.get(&key).unwrap()
     }
 
@@ -72,13 +71,11 @@ impl BmsParser for BmsStringParser {
                             let key = &line[1..6];
                             let value = &line[7..];
                             channels.insert(key.to_string(), value.to_string());
-                            println!("channel: {} = {}", key, value);
                         } else {
                             let tokens: Vec<&str> = trimmed.split(' ').collect();
                             let key = &tokens.get(0).unwrap()[1..];
                             let value = tokens[1..].join(" ");
                             headers.insert(key.to_string(), value.to_string());
-                            println!("command: {} = {}", key, value);
                         }
                     },
                     _ => continue // comment line

@@ -83,6 +83,10 @@ pub struct BmsFileLoader {
 }
 
 impl BmsFileLoader {
+    pub fn new(path: &str) -> BmsFileLoader {
+        BmsFileLoader { path: path.to_string() }
+    }
+
     fn list_segment_ids(script: &BmsScript) -> Vec<&str> {
         let channels = script.channels().keys();
         let mut ret: Vec<&str> = vec![];
@@ -146,7 +150,7 @@ impl BmsLoader for BmsFileLoader {
             };
             let beats: f64 = 4. * segment_size;
             // TODO: handle soft landing
-            let segment_duration = BmsFileLoader::beat_duration(segment_size) * beats;
+            let segment_duration = BmsFileLoader::beat_duration(current_bpm) * beats;
 
             for key in &keys {
                 let channel_key = format!("{}{}", segment_id, channel_of_key(key));
@@ -160,12 +164,18 @@ impl BmsLoader for BmsFileLoader {
                 for idx in 0..notes {
                     let wav_id = &channel_commands[2*idx..(2*idx + 2)]; // TODO: use this.
                     let timing = segment_head + (idx as f64) * notes_interval;
-                    sounds.push(Sound { key: *key, timing: timing, handle: &MEANINGLESS_HANDLE });
+
+                    if wav_id != "00" {
+                        println!("{} {}", wav_id, timing);
+                        sounds.push(Sound { key: *key, timing: timing, handle: &MEANINGLESS_HANDLE });
+                    }
                 };
             };
 
             segment_head += segment_duration;
         };
+
+        println!("notes: {}", sounds.len());
 
         Bms { bpms: bpms, bars: bars, sounds: sounds }
     }

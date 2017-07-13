@@ -57,7 +57,7 @@ fn main() {
         note_white: Texture::from_path(Path::new("resource/note_white.png")).unwrap(),
     };
 
-    let loader = bms_loader::FixtureLoader::new();
+    let loader = bms_loader::BmsFileLoader::new("example/conflict/_03_conflict.bme");
 
     use bms_loader::BmsLoader;
     let mut bms_player = bms_player::BmsPlayer::new(
