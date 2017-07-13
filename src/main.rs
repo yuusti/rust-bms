@@ -5,6 +5,7 @@ extern crate opengl_graphics;
 extern crate ears;
 extern crate rand;
 extern crate regex;
+extern crate music;
 
 use piston::window::WindowSettings;
 use glutin_window::GlutinWindow as Window;
@@ -60,14 +61,17 @@ fn main() {
     let loader = bms_loader::BmsFileLoader::new("example/conflict/_03_conflict.bme");
 
     use bms_loader::BmsLoader;
-    let mut bms_player = bms_player::BmsPlayer::new(
-        GlGraphics::new(opengl),
-        &textures,
-        loader.load(),
-        0.0,
-        200.0
-    );
 
-//    play_sound("resource/loop.wav");
-    bms_player.run(&mut window);
+    music::start::<bms_loader::MusicX, bms_loader::SoundX, _>(|| {
+        let mut bms_player = bms_player::BmsPlayer::new(
+            GlGraphics::new(opengl),
+            &textures,
+            loader.load(),
+            0.0,
+            200.0
+        );
+
+    //    play_sound("resource/loop.wav");
+        bms_player.run(&mut window);
+    });
 }

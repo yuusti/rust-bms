@@ -1,15 +1,22 @@
-use ears;
+extern crate music;
 use rand::{self, Rng};
 use bms_parser::{BmsParser, BmsFileParser, BmsScript};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-type Wav = ears::Sound;
-pub type Wavs = HashMap<String, Wav>;
-
 pub struct KeyMetadata {
     id: u32,
     channel: String,
+}
+
+#[derive(Copy, Clone, Hash, PartialEq, Eq)]
+pub struct MusicX {
+    pub id: u32,
+}
+
+#[derive(Copy, Clone, Hash, PartialEq, Eq)]
+pub struct SoundX {
+    pub id: u32,
 }
 
 #[derive(Copy, Clone, Hash, Eq, PartialEq, Debug)]
@@ -49,7 +56,7 @@ fn channel_of_key(key: &Key) -> &'static str {
         Key::P1_KEY6 => "18",
         Key::P1_KEY7 => "19",
         Key::P1_SCRATCH => "16",
-        Key::BACK_CHORUS => "11",
+        Key::BACK_CHORUS => "01",
         _ => "none",
     }
 }
@@ -57,7 +64,7 @@ fn channel_of_key(key: &Key) -> &'static str {
 pub struct Sound {
     pub key: Key,
     pub timing: f64,
-    pub wav_id: String,
+    pub wav_id: SoundX,
 }
 
 // pub struct Sound<'a> {
@@ -72,7 +79,6 @@ pub struct BpmChange {
 }
 
 pub struct Bms {
-    pub wavs: Wavs,
     pub sounds: Vec<Sound>,
     pub bars: Vec<f64>,  // time for bar line to pass the judge line relative to start time in sec.
     pub bpms: Vec<BpmChange>,
@@ -130,6 +136,7 @@ impl BmsLoader for BmsFileLoader {
 
         // TODO: DP
         let keys = vec![
+            Key::BACK_CHORUS,
             Key::P1_KEY1,
             Key::P1_KEY2,
             Key::P1_KEY3,
@@ -141,13 +148,11 @@ impl BmsLoader for BmsFileLoader {
         ];
 
         let path_path = Path::new(&self.path);
-        let mut wavs: Wavs = HashMap::new();
         for (key, value) in script.headers() {
             if key.starts_with("WAV") {
+                //let filename = path_path.with_file_name(&value).with_extension("ogg").as_path().to_str().unwrap();
                 println!("{} {}", &value, path_path.with_file_name(&value).with_extension("ogg").as_path().to_str().unwrap());
-                if let Some (snd) = ears::Sound::new(path_path.with_file_name(&value).with_extension("ogg").as_path().to_str().unwrap()) {
-                    wavs.insert(key[3..5].to_owned(), snd);
-                }
+                music::bind_sound_file(SoundX {id: u32::from_str_radix(&key[3..5], 36).unwrap()}, path_path.with_file_name(&value).with_extension("ogg").as_path().to_str().unwrap());
             }
         }
 
@@ -182,7 +187,7 @@ impl BmsLoader for BmsFileLoader {
 
                     if wav_id != "00" {
                         println!("{} {}", wav_id, timing);
-                        sounds.push(Sound {key: Key::BACK_CHORUS, timing: timing, wav_id: wav_id.to_owned()});
+                        sounds.push(Sound {key: *key, timing: timing, wav_id: SoundX {id: u32::from_str_radix(wav_id, 36).unwrap()}});
                     }
                 };
             };
@@ -192,7 +197,7 @@ impl BmsLoader for BmsFileLoader {
 
         println!("notes: {}", sounds.len());
 
-        Bms { wavs: wavs, bpms: bpms, bars: bars, sounds: sounds }
+        Bms { bpms: bpms, bars: bars, sounds: sounds }
     }
 }
 
@@ -220,18 +225,16 @@ impl BmsLoader for FixtureLoader {
         let mut rng = rand::thread_rng();
 
         let mut v = vec![];
-        let mut wavs: Wavs = HashMap::new();
         //wavs.insert("01".to_owned(), None);
         for i in 0..10000 {
             v.push(
-                Sound { key: keys[i % keys.len()], timing: rng.gen_range(1f64, 1000f64), wav_id: "01".to_owned() },
+                Sound { key: keys[i % keys.len()], timing: rng.gen_range(1f64, 1000f64), wav_id: SoundX { id: 1 } },
             )
         }
         v.sort_by(|a, b| a.timing.partial_cmp(&b.timing).unwrap());
 
         use std::f64;
         Bms {
-            wavs: wavs,
             sounds: v,
             bars: (0..1000i64).map(|x| x as f64).collect(),
             bpms: (0..100000i64).map(|x| BpmChange { timing: x as f64 / 100.0, bpm: 201.0 + 200.0 * ((x as f64 / 100.0 % (f64::consts::PI * 2.0)).sin()) }).collect()
