@@ -10,15 +10,28 @@ pub struct BmsScript {
 }
 
 impl BmsScript {
-    fn wav_file(&self, key: &str) -> &str {
+    pub fn wav_file(&self, key: &str) -> &str {
         unimplemented!()
     }
 
-    fn channel(&self, segment_id: u32, channel_id: u32) -> &str {
-        let key = format!("{0: <03}{1: <02}", segment_id, channel_id);
+    pub fn channels(&self) -> &HashMap<String, String> {
+        &self.channels
+    }
+
+    pub fn headers(&self) -> &HashMap<String, String> {
+        &self.headers
+    }
+
+    pub fn channel(&self, segment_id: &str, channel_id: &str) -> &str {
+        let key = format!("{0}{1}", segment_id, channel_id);
         println!("{}", key);
         self.channels.get(&key).unwrap()
     }
+
+    pub fn header(&self, key: &str) -> &str {
+        self.headers.get(key).unwrap()
+    }
+
 }
 
 pub trait BmsParser {
@@ -26,7 +39,7 @@ pub trait BmsParser {
 }
 
 pub struct BmsFileParser {
-    path: String
+    pub path: String
 }
 
 impl BmsParser for BmsFileParser {
@@ -57,7 +70,7 @@ impl BmsParser for BmsStringParser {
                         let channel_re = Regex::new(r"^#\d{5}:.*$").unwrap();
                         if channel_re.is_match(&trimmed) {
                             let key = &line[1..6];
-                            let value = &line[8..];
+                            let value = &line[7..];
                             channels.insert(key.to_string(), value.to_string());
                             println!("channel: {} = {}", key, value);
                         } else {
@@ -79,6 +92,6 @@ impl BmsParser for BmsStringParser {
 #[test]
 fn parser_test() {
     let bms = BmsFileParser { path: "example/conflict/_01_conflict.bme".to_string() }.parse();
-    println!("{}", bms.headers.get("GENRE").unwrap());
-    println!("{}", bms.channel(1, 1))
+    println!("{}", bms.headers().get("GENRE").unwrap());
+    println!("{}", bms.channel("091", "06"))
 }
