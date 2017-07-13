@@ -3,6 +3,8 @@ extern crate graphics;
 extern crate glutin_window;
 extern crate opengl_graphics;
 extern crate ears;
+extern crate regex;
+
 
 use piston::window::WindowSettings;
 use piston::event_loop::*;
@@ -17,6 +19,7 @@ use std::thread;
 
 mod bms_player;
 mod bms_loader;
+mod bms_parser;
 
 #[allow(dead_code)]
 fn play_sound(path: &'static str) {
