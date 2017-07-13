@@ -23,27 +23,6 @@ pub struct BmsPlayer<'a> {
     events: Vec<Event<'a>>,
 }
 
-#[derive(Copy, Clone)]
-enum Color {
-    RED,
-    WHITE,
-    BLUE,
-    BLACK,
-    GREY,
-}
-
-impl Color {
-    pub fn value(&self) -> [f32; 4] {
-        match *self {
-            Color::RED => [1.0, 0.0, 0.0, 1.0],
-            Color::WHITE => [1.0, 1.0, 1.0, 1.0],
-            Color::BLUE => [0.0, 0.0, 1.0, 1.0],
-            Color::BLACK => [0.0, 0.0, 0.0, 1.0],
-            Color::GREY => [0.5, 0.5, 0.5, 1.0],
-        }
-    }
-}
-
 fn assigned_key(key: bms_loader::Key) -> bool {
     (key as u8) < 8
 }
