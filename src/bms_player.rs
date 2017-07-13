@@ -24,6 +24,7 @@ pub struct BmsPlayer<'a> {
     events: Vec<Event<'a>>,
     judge_index_by_key: HashMap<bms_loader::Key, usize>,
     pushed_key_set: HashSet<bms_loader::Key>,
+    judge_display: JudgeDisplay,
 }
 
 #[inline]
@@ -104,7 +105,8 @@ impl<'a> BmsPlayer<'a> {
             objects_by_key: objects_by_key,
             events: events,
             judge_index_by_key: obj_index_by_key.clone(),
-            pushed_key_set: HashSet::new()
+            pushed_key_set: HashSet::new(),
+            judge_display: JudgeDisplay{judge: Judge::GOOD, t: 0.0}
         }
     }
 
@@ -131,7 +133,7 @@ impl<'a> BmsPlayer<'a> {
     }
 
     #[inline]
-    fn calc_pos(arrival_time: f64, current_time: f64, bpm: f64, speed: f64) -> f64 {
+    fn calc_pos(arrival_time: Time, current_time: Time, bpm: f64, speed: f64) -> f64 {
         (arrival_time - current_time) * bpm / 240f64 * speed
     }
 
@@ -180,6 +182,18 @@ impl<'a> BmsPlayer<'a> {
             }
         }
 
+        let judge_texture = if self.judge_display.t <= 0.0 { None } else {
+            Some(
+                match self.judge_display.judge {
+                    Judge::PGREAT => &self.textures.judge_perfect,
+                    Judge::GREAT => &self.textures.judge_great,
+                    Judge::GOOD => &self.textures.judge_good,
+                    Judge::BAD => &self.textures.judge_bad,
+                    Judge::POOR => &self.textures.judge_poor,
+                }
+            )
+        };
+
         self.gl.draw(args.viewport(), |c, gl| {
             // back ground
             let image = Image::new().rect(rectangle::rectangle_by_corners(0.0, 0.0, width, height));
@@ -194,6 +208,12 @@ impl<'a> BmsPlayer<'a> {
                 let image = Image::new().rect(rectangle::rectangle_by_corners(0.0, 0.0, draw.width, draw.height));
                 image.draw(draw.texture, &DrawState::new_alpha(), c.transform.trans(draw.x, draw.y - draw.height / 2.0), gl);
             }
+
+            // judge
+            if let Some(texture) = judge_texture {
+                let image = Image::new().rect(rectangle::rectangle_by_corners(0.0, 0.0, width / 3.0, height / 3.0));
+                image.draw(texture, &DrawState::new_alpha(), c.transform.trans(width - width / 3.0, height / 2.0), gl);
+            }
         });
     }
 
@@ -203,7 +223,8 @@ impl<'a> BmsPlayer<'a> {
             self.bpm = 1.0;
         }
 
-        // update judge
+
+        self.judge_display.update_time(args.dt);
     }
 
     fn on_key_down(&mut self, key: &Key) {
@@ -241,6 +262,7 @@ impl<'a> BmsPlayer<'a> {
                             println!("timing={} ({})", time_diff, if time_diff < 0.0 { "SLOW" } else { "FAST" });
                             if let Some(judge) = Judge::get_judge(f64::abs(time_diff)) {
                                 println!("{:?}", judge);
+                                self.judge_display.update_judge(judge);
                                 *index += 1;
                             }
                             break;
@@ -250,7 +272,6 @@ impl<'a> BmsPlayer<'a> {
                 }
             }
         }
-
     }
 
     fn on_key_up(&mut self, key: &Key) {
@@ -313,8 +334,12 @@ pub struct Textures {
     pub note_blue: Texture,
     pub note_red: Texture,
     pub note_white: Texture,
+    pub judge_perfect: Texture,
+    pub judge_great: Texture,
+    pub judge_good: Texture,
+    pub judge_bad: Texture,
+    pub judge_poor: Texture,
 }
-
 
 #[derive(Debug)]
 enum Judge {
@@ -326,7 +351,7 @@ enum Judge {
 }
 
 impl Judge {
-    fn get_judge(d: f64) -> Option<Judge> {
+    fn get_judge(d: Time) -> Option<Judge> {
         if d < 0.1 {
             Some(if d < 0.02 {
                 Judge::PGREAT
@@ -342,5 +367,24 @@ impl Judge {
         } else {
             None
         }
+    }
+}
+
+struct JudgeDisplay {
+    judge: Judge,
+    t: Time
+}
+
+impl JudgeDisplay {
+    pub fn update_time(&mut self, dt: Time) {
+        self.t -= dt;
+        if (self.t < 0.0) {
+            self.t = 0.0;
+        }
+    }
+
+    pub fn update_judge(&mut self, judge: Judge) {
+        self.judge = judge;
+        self.t = 1.0;
     }
 }

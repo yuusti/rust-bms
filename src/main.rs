@@ -18,8 +18,6 @@ mod bms_parser;
 mod bms_player;
 mod bms_loader;
 
-use bms_player::Textures;
-
 #[allow(dead_code)]
 fn play_sound(path: &'static str) {
     print!("{}", path);
@@ -55,6 +53,11 @@ fn main() {
         note_blue: Texture::from_path(Path::new("resource/note_blue.png")).unwrap(),
         note_red: Texture::from_path(Path::new("resource/note_red.png")).unwrap(),
         note_white: Texture::from_path(Path::new("resource/note_white.png")).unwrap(),
+        judge_perfect: Texture::from_path(Path::new("resource/judge_perfect.png")).unwrap(),
+        judge_great: Texture::from_path(Path::new("resource/judge_great.png")).unwrap(),
+        judge_good: Texture::from_path(Path::new("resource/judge_good.png")).unwrap(),
+        judge_bad: Texture::from_path(Path::new("resource/judge_bad.png")).unwrap(),
+        judge_poor: Texture::from_path(Path::new("resource/judge_poor.png")).unwrap()
     };
 
     let loader = bms_loader::BmsFileLoader::new("example/conflict/_03_conflict.bme");
