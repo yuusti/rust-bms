@@ -7,6 +7,7 @@ use graphics::rectangle::square;
 
 use std::path::Path;
 use bms_loader::{self, Bms, Sound};
+use std::collections::HashMap;
 use ears;
 
 type Time = f64;
@@ -17,14 +18,10 @@ pub struct BmsPlayer<'a> {
     time: Time,
     speed: f64,
     bpm: f64,
-    obj_index: usize,
+    obj_index_by_key: HashMap<bms_loader::Key, usize>,
     event_index: usize,
-    objects: Vec<Draw<'a>>,
+    objects_by_key: HashMap<bms_loader::Key, Vec<Draw<'a>>>,
     events: Vec<Event<'a>>,
-}
-
-fn assigned_key(key: bms_loader::Key) -> bool {
-    (key as u8) < 8
 }
 
 #[inline]
@@ -62,29 +59,37 @@ impl<'a> BmsPlayer<'a> {
         time: Time,
         speed: f64,
     ) -> BmsPlayer<'a> {
-        let mut objects = vec![];
+        let mut objects_by_key = HashMap::new();
+        for key in bms_loader::Key::visible_keys() {
+            objects_by_key.insert(key, vec![]);
+        }
+
         let mut events = vec![];
         for sound in bms.sounds {
-            if assigned_key(sound.key) {
+            if objects_by_key.contains_key(&sound.key) {
                 if let Some((x, width, texture)) = note_info(&textures, sound.key) {
-                    objects.push(Draw { key: Some(sound.key), timing: sound.timing, x: x, width: width, height: NOTES_HEIGHT, texture: &texture });
+                    objects_by_key.get_mut(&sound.key).unwrap().push(Draw {timing: sound.timing, x: x, width: width, height: NOTES_HEIGHT, texture: &texture });
                 }
             } else {
                 events.push(Event { timing: sound.timing, event_type: EventType::PlaySound(sound) });
             }
         }
 
+        objects_by_key.insert(bms_loader::Key::BACK_CHORUS, vec![]);
         for bar in bms.bars.iter() {
-            objects.push(Draw { key: None, timing: *bar, x: 0.0, width: 1000.0, height: BAR_HEIGHT, texture: &textures.background });
+            objects_by_key.get_mut(&bms_loader::Key::BACK_CHORUS).unwrap().push(Draw {timing: *bar, x: 0.0, width: 1000.0, height: BAR_HEIGHT, texture: &textures.background });
+        }
+
+        let mut obj_index_by_key = HashMap::new();
+        for (key, ref mut objects) in &mut objects_by_key {
+            objects.sort_by(|a, b| a.timing.partial_cmp(&b.timing).unwrap());
+            obj_index_by_key.insert(*key, 0usize);
         }
 
         for bpm in bms.bpms.iter() {
-            events.push(Event { timing: bpm.timing, event_type: EventType::ChangeBpm(bpm.bpm)});
+            events.push(Event { timing: bpm.timing, event_type: EventType::ChangeBpm(bpm.bpm) });
         }
-
-        objects.sort_by(|a, b| a.timing.partial_cmp(&b.timing).unwrap());
         events.sort_by(|a, b| a.timing.partial_cmp(&b.timing).unwrap());
-
 
         BmsPlayer {
             gl: gl,
@@ -92,9 +97,9 @@ impl<'a> BmsPlayer<'a> {
             time: time,
             speed: speed,
             bpm: 130f64,
-            obj_index: 0usize,
+            obj_index_by_key: obj_index_by_key,
             event_index: 0usize,
-            objects: objects,
+            objects_by_key: objects_by_key,
             events: events,
         }
     }
@@ -137,22 +142,38 @@ impl<'a> BmsPlayer<'a> {
 
         // drawable objects
         let mut drawings = vec![];
-        let start = self.obj_index;
-        for draw in &self.objects[start..self.objects.len()] {
-            let y = height - Self::calc_pos(draw.timing, self.time, self.bpm, self.speed);
-            drawings.push(DrawInfo { x: draw.x, y: y, width: draw.width, height: draw.height, texture: draw.texture });
+        for (key, objects) in &self.objects_by_key {
+            let start = *self.obj_index_by_key.get(key).unwrap();
+            let mut next_start = start;
+            for draw in objects {
+                let y = height - Self::calc_pos(draw.timing, self.time, self.bpm, self.speed);
+                drawings.push(DrawInfo { x: draw.x, y: y, width: draw.width, height: draw.height, texture: draw.texture });
 
-            if y > height {
-                self.obj_index += 1;
+                if y > height {
+                    next_start += 1;
+                }
+                if y < 0.0 {
+                    break;
+                }
             }
-            if y < 0.0 {
+            *self.obj_index_by_key.get_mut(key).unwrap() = next_start;
+        }
+
+        // process events
+        let start = self.event_index;
+        for event in &self.events[start..self.events.len()] {
+            if event.timing <= self.time {
+                self.event_index += 1;
+                match event.event_type {
+                    EventType::ChangeBpm(ref x) => {
+                        self.bpm = *x;
+                    }
+                    EventType::PlaySound(ref snd) => (),
+                }
+            } else {
                 break;
             }
         }
-
-        let events = &self.events;
-        let event_index = self.event_index;
-
 
         self.gl.draw(args.viewport(), |c, gl| {
             // back ground
@@ -169,15 +190,15 @@ impl<'a> BmsPlayer<'a> {
                 image.draw(draw.texture, &DrawState::new_alpha(), c.transform.trans(draw.x, draw.y), gl);
             }
 
-            // events
-            for event in &events[event_index..events.len()] {}
-
             // TODO: judge?
         });
     }
 
     fn update(&mut self, args: &UpdateArgs) {
         self.time += args.dt;
+        if self.bpm < 1.0 {
+            self.bpm = 1.0;
+        }
     }
 
     fn on_key_down(&mut self, key: &Key) {
@@ -199,7 +220,6 @@ enum EventType<'a> {
 
 #[derive(Clone)]
 struct Draw<'a> {
-    pub key: Option<bms_loader::Key>,
     pub timing: Time,
     pub x: f64,
     pub width: f64,
