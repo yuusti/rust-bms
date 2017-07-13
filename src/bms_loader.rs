@@ -1,59 +1,83 @@
-pub struct Bar {
-    num: i32,
-    pub ch: i32,
-    pub notes: Vec<(f64, i32)>
+use ears;
+use rand::{self, Rng};
+
+#[derive(Copy, Clone)]
+pub enum Key {
+    P1_KEY1 = 1,
+    P1_KEY2 = 2,
+    P1_KEY3 = 3,
+    P1_KEY4 = 4,
+    P1_KEY5 = 5,
+    P1_KEY6 = 6,
+    P1_KEY7 = 7,
+    P1_SCRATCH = 0,
+    P1_FREE_SCRATCH = 254,
+    BACK_CHORUS = 255,
 }
 
-impl Bar {
-    fn pos(num: i32, obj: &str) -> Vec<(f64, i32)> {
-        let num = num as f64;
-        // TODO: implement
-        return vec![(num, 1), (num + 0.25, 1), (num + 0.5, 1), (num + 0.75, 1)];
-    }
-
-    pub fn new(num: i32, ch: i32, obj: &str) -> Bar {
-        Bar { num: num, ch: ch, notes: Bar::pos(num, &obj) }
-    }
+pub struct Sound<'a> {
+    pub key: Key,
+    pub timing: f64,
+    pub handle: &'a i32,
 }
 
-pub struct Chart {
+//pub struct Sound<'a> {
+//    pub key: Key,
+//    pub timing: f64,
+//    pub handle: &'a ears::Sound,
+//}
+
+pub struct BpmChange {
+    pub timing: f64,
     pub bpm: f64,
-    pub bars: Vec<Bar>,
+}
+
+pub struct Bms<'a> {
+    pub sounds: Vec<Sound<'a>>,
+    pub bars: Vec<f64>,
+    pub bpms: Vec<BpmChange>,
 }
 
 pub trait BmsLoader {
-    fn load(&self) -> Chart;
+    fn load(&self) -> Bms;
 }
 
-pub struct BmsFileLoader {
-    path: String
-}
-
-impl BmsLoader for BmsFileLoader {
-    fn load(&self) -> Chart {
-        unimplemented!()
+pub struct FixtureLoader {i: i32}
+impl FixtureLoader {
+    pub fn new() -> FixtureLoader {
+        FixtureLoader {i: 0}
     }
 }
 
-pub struct FixtureLoader {}
 
 impl BmsLoader for FixtureLoader {
-    fn load(&self) -> Chart {
+
+    fn load(&self) -> Bms {
+        let keys = vec![
+            Key::P1_KEY1,
+            Key::P1_KEY2,
+            Key::P1_KEY3,
+            Key::P1_KEY4,
+            Key::P1_KEY5,
+            Key::P1_KEY6,
+            Key::P1_KEY7,
+            Key::P1_SCRATCH,
+        ];
+
+        let mut rng = rand::thread_rng();
+
         let mut v = vec![];
-
-        let v2 = vec![11, 12, 13, 14, 15, 16, 17, 18];
-
-        for i in 0..1000 {
-            v.push(Bar::new(
-                i as i32,
-                v2[i % v2.len()],
-                "01010101"
-            ));
+        for i in 0..100000 {
+            v.push(
+                Sound {key: keys[i%keys.len()], timing: rng.gen_range(1f64, 1000f64), handle: &self.i},
+            )
         }
+        v.sort_by(|a, b| a.timing.partial_cmp(&b.timing).unwrap());
 
-        Chart {
-            bpm: 130.0,
-            bars: v
+        Bms {
+            sounds: v,
+            bars: (0..1000i64).map(|x| x as f64).collect(),
+            bpms: vec![]
         }
     }
 }

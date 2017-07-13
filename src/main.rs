@@ -3,6 +3,7 @@ extern crate graphics;
 extern crate glutin_window;
 extern crate opengl_graphics;
 extern crate ears;
+extern crate rand;
 
 use piston::window::WindowSettings;
 use piston::event_loop::*;
@@ -50,7 +51,7 @@ fn main() {
     let bg = Texture::from_path(Path::new("resource/a.png")).unwrap();
     let x = Texture::from_path(Path::new("resource/a.png")).unwrap();
 
-    let loader = bms_loader::FixtureLoader{};
+    let loader = bms_loader::FixtureLoader::new();
 
     use bms_loader::BmsLoader;
     let mut bms_player = bms_player::BmsPlayer::new(
@@ -60,7 +61,7 @@ fn main() {
         x,
         loader.load(),
         0.0,
-        1.0
+        200.0
     );
 
 //    play_sound("resource/loop.wav");
