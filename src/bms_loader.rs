@@ -14,12 +14,12 @@ pub struct MusicX {
     pub id: u32,
 }
 
-#[derive(Copy, Clone, Hash, PartialEq, Eq)]
+#[derive(Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Debug)]
 pub struct SoundX {
     pub id: u32,
 }
 
-#[derive(Copy, Clone, Hash, Eq, PartialEq, Debug)]
+#[derive(Copy, Clone, Hash, Eq, PartialEq, PartialOrd, Debug)]
 pub enum Key {
     P1_KEY1 = 1,
     P1_KEY2 = 2,
@@ -73,6 +73,7 @@ pub struct Sound {
 //    pub handle: &'a ears::Sound,
 // }
 
+#[derive(PartialEq, PartialOrd)]
 pub struct BpmChange {
     pub timing: f64,
     pub bpm: f64,
@@ -86,6 +87,25 @@ pub struct Bms {
 
 pub trait BmsLoader {
     fn load(&self) -> Bms;
+}
+
+#[derive(Debug)]
+struct BmsEvent {
+    segment_position: f64,
+    event: BmsEventType
+}
+
+impl BmsEvent {
+    fn new(segment_position: f64, event: BmsEventType) -> BmsEvent {
+        BmsEvent { segment_position: segment_position, event: event }
+    }
+}
+
+#[derive(Debug)]
+enum BmsEventType {
+    Bar,
+    BpmChange(f64),
+    Key(Key, SoundX),
 }
 
 pub struct BmsFileLoader {
@@ -114,6 +134,19 @@ impl BmsFileLoader {
 
     fn beat_duration(bpm: f64) -> f64 {
         60. / bpm
+    }
+
+    fn decompose_command(commands: &str) -> Vec<&str> {
+        let notes = commands.len() / 2;
+        let mut command_v = vec![];
+
+        for idx in 0..notes {
+            let fr = 2 * idx;
+            let to = fr + 2;
+            command_v.push(&commands[fr..to]);
+        }
+
+        command_v
     }
 }
 
@@ -162,7 +195,8 @@ impl BmsLoader for BmsFileLoader {
         let mut current_bpm = initial_bpm;
         let mut segment_head: f64 = 0.;
         for segment_id in &segment_ids {
-            bars.push(segment_head);
+            let mut events: Vec<BmsEvent> = vec![];
+            events.push(BmsEvent::new(0., BmsEventType::Bar));
 
             let size_key = format!("{}{}", segment_id, "02");
 
@@ -171,29 +205,68 @@ impl BmsLoader for BmsFileLoader {
                 None => 1.,
             };
             let beats: f64 = 4. * segment_size;
-            // TODO: handle soft landing
-            let segment_duration = BmsFileLoader::beat_duration(current_bpm) * beats;
 
+            let empty = vec![];
+            // parse bpm change
+            // TODO: handle channel 08 soft landing
+            let softlanding_channel = format!("{}03", segment_id);
+            for softlanding_channel_commands in script.channels().get(&softlanding_channel).unwrap_or(&empty) {
+                let commands = BmsFileLoader::decompose_command(softlanding_channel_commands);
+                let notes = commands.len();
+                for (idx, command) in commands.iter().enumerate() {
+                    let segment_position = (idx as f64) / (notes as f64);
+                    let new_bpm = BmsFileLoader::decode(command);
+                    if new_bpm > 0 {
+                        events.push(BmsEvent::new(segment_position, BmsEventType::BpmChange(new_bpm as f64)))
+                    }
+                }
+            }
+
+            // parse keys
             for key in &keys {
                 let channel_key = format!("{}{}", segment_id, channel_of_key(key));
-                let empty = vec![];
                 for channel_commands in script.channels().get(&channel_key).unwrap_or(&empty) {
-                    let notes = channel_commands.len() / 2;
-                    // TODO: handle soft landing
-                    let notes_interval = segment_duration / (notes as f64);
+                    let commands = BmsFileLoader::decompose_command(channel_commands);
+                    let notes = commands.len();
 
-                    for idx in 0..notes {
-                        let wav_id = u32::from_str_radix(&channel_commands[2*idx..(2*idx + 2)], 36).unwrap();
-                        let timing = segment_head + (idx as f64) * notes_interval;
+                    for (idx, command) in commands.iter().enumerate() {
+                        let wav_id = u32::from_str_radix(command, 36).unwrap();
+                        let segment_position = (idx as f64) / (notes as f64);
 
                         if wav_id != 0 && wav_ids.contains(&wav_id) {
-                            sounds.push(Sound {key: *key, timing: timing, wav_id: SoundX {id: wav_id}});
-                        }
+                            events.push(BmsEvent::new(segment_position, BmsEventType::Key(*key, SoundX {id: wav_id})));
+                            //events.push(BmsEvent::new(segment_position, BmsEventType::Key(Key::BACK_CHORUS, SoundX {id: wav_id})));
+                        };
                     };
                 };
             };
 
-            segment_head += segment_duration;
+            events.sort_by(|a, b| a.segment_position.partial_cmp(&b.segment_position).unwrap());
+            let mut previous_position: f64 = 0.;
+            let mut previous_timing: f64 = segment_head;
+            let mut current_segment_bpm: f64 = current_bpm;
+            for event in events {
+                let position_delta = event.segment_position - previous_position;
+                let timing_delta = position_delta * beats * BmsFileLoader::beat_duration(current_segment_bpm);
+                let timing = previous_timing + timing_delta;
+
+                println!("{} {:?}", timing, event);
+
+                match event.event {
+                    BmsEventType::Bar => bars.push(timing),
+                    BmsEventType::Key(key, soundx) => sounds.push(Sound { key: key, timing: timing, wav_id: soundx} ),
+                    BmsEventType::BpmChange(newBpm) => {
+                        current_segment_bpm = newBpm;
+                        bpms.push(BpmChange { timing: timing, bpm: newBpm} );
+                    },
+                };
+
+                previous_position = event.segment_position;
+                previous_timing = timing;
+            }
+
+            current_bpm = current_segment_bpm;
+            segment_head = previous_timing + (1. - previous_position) * beats * BmsFileLoader::beat_duration(current_bpm);
         };
 
         println!("notes: {}", sounds.len());
