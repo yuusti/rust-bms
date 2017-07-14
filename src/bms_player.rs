@@ -109,7 +109,7 @@ impl<'a> BmsPlayer<'a> {
             events: events,
             judge_index_by_key: obj_index_by_key.clone(),
             pushed_key_set: HashSet::new(),
-            judge_display: JudgeDisplay{judge: Judge::GOOD, t: 0.0}
+            judge_display: JudgeDisplay::new()
         }
     }
 
@@ -190,15 +190,14 @@ impl<'a> BmsPlayer<'a> {
         }
 
         let judge_texture = if self.judge_display.t <= 0.0 { None } else {
-            Some(
-                match self.judge_display.judge {
-                    Judge::PGREAT => &self.textures.judge_perfect,
-                    Judge::GREAT => &self.textures.judge_great,
-                    Judge::GOOD => &self.textures.judge_good,
-                    Judge::BAD => &self.textures.judge_bad,
-                    Judge::POOR => &self.textures.judge_poor,
-                }
-            )
+            match self.judge_display.judge {
+                Some(Judge::PGREAT) => Some(&self.textures.judge_perfect),
+                Some(Judge::GREAT) => Some(&self.textures.judge_great),
+                Some(Judge::GOOD) => Some(&self.textures.judge_good),
+                Some(Judge::BAD) => Some(&self.textures.judge_bad),
+                Some(Judge::POOR) => Some(&self.textures.judge_poor),
+                _ => None,
+            }
         };
 
         self.gl.draw(args.viewport(), |c, gl| {
@@ -250,6 +249,10 @@ impl<'a> BmsPlayer<'a> {
             }
             Key::Down => {
                 self.speed -= 10.0;
+                None
+            }
+            Key::Space => {
+                self.speed = self.bpm * 12.5;
                 None
             }
             _ => None,
@@ -351,7 +354,7 @@ pub struct Textures {
     pub judge_poor: Texture,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Hash, Copy, Clone)]
 enum Judge {
     PGREAT,
     GREAT,
@@ -378,14 +381,27 @@ impl Judge {
             None
         }
     }
+
+    fn combo_lasts(judge: Judge) -> bool {
+        match judge {
+            Judge::PGREAT | Judge::GREAT | Judge::GOOD => true,
+            _ => false
+        }
+    }
 }
 
 struct JudgeDisplay {
-    judge: Judge,
-    t: Time
+    judge: Option<Judge>,
+    t: Time,
+    count: HashMap<Judge, u32>,
+    combo: u32
 }
 
 impl JudgeDisplay {
+    pub fn new() -> JudgeDisplay {
+        JudgeDisplay{judge: None, t: 0.0, count: HashMap::new(), combo: 0u32 }
+    }
+
     pub fn update_time(&mut self, dt: Time) {
         self.t -= dt;
         if (self.t < 0.0) {
@@ -394,7 +410,15 @@ impl JudgeDisplay {
     }
 
     pub fn update_judge(&mut self, judge: Judge) {
-        self.judge = judge;
+        if let Some(prev) = self.judge {
+            if Judge::combo_lasts(prev) && Judge::combo_lasts(judge) {
+                self.combo += 1;
+            } else {
+                self.combo = 0;
+            }
+        }
+        *self.count.entry(judge).or_insert(0) += 1;
+        self.judge = Some(judge);
         self.t = 1.0;
     }
 }
