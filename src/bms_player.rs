@@ -31,7 +31,7 @@ pub struct BmsPlayer<'a> {
     judge_display: JudgeDisplay,
     y_offset: f64,
     bpms: Vec<bms_loader::BpmChange>,
-    init_time: Option<f64>
+    init_time: Option<f64>,
 }
 
 #[inline]
@@ -49,6 +49,26 @@ fn note_info(textures: &Textures, key: bms_loader::Key) -> Option<(f64, f64, &Te
         }
         Key::P1_SCRATCH => {
             Some((OFFSET, SCR_WIDTH - OFFSET * 2.0, &textures.note_red))
+        }
+        _ => None,
+    }
+}
+
+#[inline]
+fn beam_info(textures: &Textures, key: bms_loader::Key) -> Option<(f64, f64, &Texture)> {
+    // x pos, size, color
+    use bms_loader::Key;
+    let x = key as u8;
+
+    match key {
+        Key::P1_KEY1 | Key::P1_KEY3 | Key::P1_KEY5 | Key::P1_KEY7 => {
+            Some((SCR_WIDTH + NOTES1_WIDTH * (x / 2) as f64 + NOTES2_WIDTH * ((x - 1) / 2) as f64 + OFFSET, NOTES1_WIDTH - OFFSET * 2.0, &textures.white_beam))
+        }
+        Key::P1_KEY2 | Key::P1_KEY4 | Key::P1_KEY6 => {
+            Some((SCR_WIDTH + NOTES1_WIDTH * (x / 2) as f64 + NOTES2_WIDTH * ((x - 1) / 2) as f64 + OFFSET, NOTES2_WIDTH - OFFSET * 2.0, &textures.blue_beam))
+        }
+        Key::P1_SCRATCH => {
+            Some((OFFSET, SCR_WIDTH - OFFSET * 2.0, &textures.red_beam))
         }
         _ => None,
     }
@@ -164,7 +184,7 @@ impl<'a> BmsPlayer<'a> {
             judge_display: JudgeDisplay::new(),
             y_offset: 0f64,
             bpms: bms.bpms,
-            init_time: None
+            init_time: None,
         }
     }
 
@@ -237,6 +257,9 @@ impl<'a> BmsPlayer<'a> {
             }
         };
 
+        let pushed_key_set = &self.pushed_key_set;
+        let textures = &self.textures;
+
         self.gl.draw(args.viewport(), |c, gl| {
             // back ground
             let image = Image::new().rect(rectangle::rectangle_by_corners(0.0, 0.0, width, height));
@@ -245,6 +268,13 @@ impl<'a> BmsPlayer<'a> {
             // lanes
             let image = Image::new().rect(rectangle::rectangle_by_corners(0.0, 0.0, SCR_WIDTH + NOTES1_WIDTH * 4.0 + NOTES2_WIDTH * 3.0, height));
             image.draw(lane_bg, &DrawState::new_alpha(), c.transform, gl);
+
+            for pushed_key in pushed_key_set {
+                if let Some((x, beam_width, texture)) = beam_info(textures, *pushed_key) {
+                    let image = Image::new().rect(rectangle::rectangle_by_corners(0.0, 0.0, beam_width, height - 14f64));
+                    image.draw(texture, &DrawState::new_alpha(), c.transform.trans(x, 0f64), gl)
+                }
+            }
 
             // drawable objects
             for draw in &drawings {
@@ -415,6 +445,9 @@ pub struct Textures {
     pub judge_good: Texture,
     pub judge_bad: Texture,
     pub judge_poor: Texture,
+    pub red_beam: Texture,
+    pub white_beam: Texture,
+    pub blue_beam: Texture,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Copy, Clone)]

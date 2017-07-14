@@ -62,7 +62,10 @@ fn main() {
         judge_great: Texture::from_path(Path::new("resource/judge_great.png")).unwrap(),
         judge_good: Texture::from_path(Path::new("resource/judge_good.png")).unwrap(),
         judge_bad: Texture::from_path(Path::new("resource/judge_bad.png")).unwrap(),
-        judge_poor: Texture::from_path(Path::new("resource/judge_poor.png")).unwrap()
+        judge_poor: Texture::from_path(Path::new("resource/judge_poor.png")).unwrap(),
+        red_beam: Texture::from_path(Path::new("resource/redbeam.png")).unwrap(),
+        white_beam: Texture::from_path(Path::new("resource/whitebeam.png")).unwrap(),
+        blue_beam: Texture::from_path(Path::new("resource/bluebeam.png")).unwrap(),
     };
 
     let script_path = env::args().nth(1).expect("pass script path to first argument");

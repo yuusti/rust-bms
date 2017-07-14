@@ -67,12 +67,6 @@ pub struct Sound {
     pub wav_id: SoundX,
 }
 
-// pub struct Sound<'a> {
-//    pub key: Key,
-//    pub timing: f64,
-//    pub handle: &'a ears::Sound,
-// }
-
 #[derive(PartialEq, PartialOrd)]
 pub struct BpmChange {
     pub timing: f64,
@@ -235,7 +229,6 @@ impl BmsLoader for BmsFileLoader {
 
                         if wav_id != 0 && wav_ids.contains(&wav_id) {
                             events.push(BmsEvent::new(segment_position, BmsEventType::Key(*key, SoundX {id: wav_id})));
-                            //events.push(BmsEvent::new(segment_position, BmsEventType::Key(Key::BACK_CHORUS, SoundX {id: wav_id})));
                         };
                     };
                 };
@@ -299,7 +292,6 @@ impl BmsLoader for FixtureLoader {
         let mut rng = rand::thread_rng();
 
         let mut v = vec![];
-        //wavs.insert("01".to_owned(), None);
         for i in 0..10000 {
             v.push(
                 Sound { key: keys[i % keys.len()], timing: rng.gen_range(1f64, 1000f64), wav_id: SoundX { id: 1 } },
