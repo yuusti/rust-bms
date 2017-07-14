@@ -32,6 +32,7 @@ pub struct BmsPlayer<'a> {
     y_offset: f64,
     bpms: Vec<bms_loader::BpmChange>,
     init_time: Option<f64>,
+    keyMapping: HashMap<Key, bms_loader::Key>,
 }
 
 #[inline]
@@ -170,6 +171,20 @@ impl<'a> BmsPlayer<'a> {
         }
         events.sort_by(|a, b| a.timing.partial_cmp(&b.timing).unwrap());
 
+        let mut keyMapping = HashMap::new();
+        keyMapping.insert(Key::A, bms_loader::Key::P1_SCRATCH);
+        keyMapping.insert(Key::Z, bms_loader::Key::P1_KEY1);
+        keyMapping.insert(Key::J, bms_loader::Key::P1_KEY1);
+        keyMapping.insert(Key::S, bms_loader::Key::P1_KEY2);
+        keyMapping.insert(Key::X, bms_loader::Key::P1_KEY3);
+        keyMapping.insert(Key::K, bms_loader::Key::P1_KEY3);
+        keyMapping.insert(Key::D, bms_loader::Key::P1_KEY4);
+        keyMapping.insert(Key::C, bms_loader::Key::P1_KEY5);
+        keyMapping.insert(Key::L, bms_loader::Key::P1_KEY5);
+        keyMapping.insert(Key::F, bms_loader::Key::P1_KEY6);
+        keyMapping.insert(Key::V, bms_loader::Key::P1_KEY7);
+        keyMapping.insert(Key::Semicolon, bms_loader::Key::P1_KEY7);
+
         BmsPlayer {
             gl: gl,
             textures: textures,
@@ -185,6 +200,7 @@ impl<'a> BmsPlayer<'a> {
             y_offset: 0f64,
             bpms: bms.bpms,
             init_time: None,
+            keyMapping: keyMapping,
         }
     }
 
@@ -298,14 +314,6 @@ impl<'a> BmsPlayer<'a> {
 
     fn on_key_down(&mut self, key: &Key) {
         let down = match *key {
-            Key::A => Some(bms_loader::Key::P1_SCRATCH),
-            Key::Z => Some(bms_loader::Key::P1_KEY1),
-            Key::S => Some(bms_loader::Key::P1_KEY2),
-            Key::X => Some(bms_loader::Key::P1_KEY3),
-            Key::D => Some(bms_loader::Key::P1_KEY4),
-            Key::C => Some(bms_loader::Key::P1_KEY5),
-            Key::F => Some(bms_loader::Key::P1_KEY6),
-            Key::V => Some(bms_loader::Key::P1_KEY7),
             Key::Up => {
                 self.speed += 0.1;
                 None
@@ -317,7 +325,9 @@ impl<'a> BmsPlayer<'a> {
             Key::Space => {
                 None
             }
-            _ => None,
+            _ => {
+                self.keyMapping.get(key).map(|op| *op)
+            }
         };
 
         // judge
@@ -381,21 +391,15 @@ impl<'a> BmsPlayer<'a> {
 
     fn on_key_up(&mut self, key: &Key) {
         let up = match *key {
-            Key::A => Some(bms_loader::Key::P1_SCRATCH),
-            Key::Z => Some(bms_loader::Key::P1_KEY1),
-            Key::S => Some(bms_loader::Key::P1_KEY2),
-            Key::X => Some(bms_loader::Key::P1_KEY3),
-            Key::D => Some(bms_loader::Key::P1_KEY4),
-            Key::C => Some(bms_loader::Key::P1_KEY5),
-            Key::F => Some(bms_loader::Key::P1_KEY6),
-            Key::V => Some(bms_loader::Key::P1_KEY7),
             Key::Up => {
                 None
             }
             Key::Down => {
                 None
             }
-            _ => None,
+            _ => {
+                self.keyMapping.get(key)
+            }
         };
 
         if let Some(key) = up {
