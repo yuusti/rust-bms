@@ -68,7 +68,7 @@ fn main() {
     use bms_loader::BmsLoader;
 
     music::start::<bms_loader::MusicX, bms_loader::SoundX, _>(|| {
-        mixer::allocate_channels(64);
+        mixer::allocate_channels(256);
         let mut bms_player = bms_player::BmsPlayer::new(
             GlGraphics::new(opengl),
             &textures,
