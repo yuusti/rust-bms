@@ -6,6 +6,7 @@ extern crate ears;
 extern crate rand;
 extern crate regex;
 extern crate music;
+extern crate sdl2;
 
 use piston::window::WindowSettings;
 use glutin_window::GlutinWindow as Window;
@@ -14,6 +15,7 @@ use std::path::Path;
 
 use ears::{Sound, AudioController};
 use std::thread;
+use sdl2::mixer;
 
 mod bms_parser;
 mod bms_player;
@@ -66,6 +68,7 @@ fn main() {
     use bms_loader::BmsLoader;
 
     music::start::<bms_loader::MusicX, bms_loader::SoundX, _>(|| {
+        mixer::allocate_channels(64);
         let mut bms_player = bms_player::BmsPlayer::new(
             GlGraphics::new(opengl),
             &textures,

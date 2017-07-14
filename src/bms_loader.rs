@@ -167,7 +167,7 @@ impl BmsLoader for BmsFileLoader {
             let size_key = format!("{}{}", segment_id, "02");
 
             let segment_size: f64 = match script.channels().get(&size_key) {
-                Some(s) => s.trim().parse().unwrap(),
+                Some(s) => s.last().unwrap().trim().parse().unwrap(),
                 None => 1.,
             };
             let beats: f64 = 4. * segment_size;
@@ -176,20 +176,20 @@ impl BmsLoader for BmsFileLoader {
 
             for key in &keys {
                 let channel_key = format!("{}{}", segment_id, channel_of_key(key));
-                let empty = "00".to_string();
-                let channel_commands = script.channels().get(&channel_key).unwrap_or(&empty);
+                let empty = vec![];
+                for channel_commands in script.channels().get(&channel_key).unwrap_or(&empty) {
+                    let notes = channel_commands.len() / 2;
+                    // TODO: handle soft landing
+                    let notes_interval = segment_duration / (notes as f64);
 
-                let notes = channel_commands.len() / 2;
-                // TODO: handle soft landing
-                let notes_interval = segment_duration / (notes as f64);
+                    for idx in 0..notes {
+                        let wav_id = u32::from_str_radix(&channel_commands[2*idx..(2*idx + 2)], 36).unwrap();
+                        let timing = segment_head + (idx as f64) * notes_interval;
 
-                for idx in 0..notes {
-                    let wav_id = u32::from_str_radix(&channel_commands[2*idx..(2*idx + 2)], 36).unwrap();
-                    let timing = segment_head + (idx as f64) * notes_interval;
-
-                    if wav_id != 0 && wav_ids.contains(&wav_id) {
-                        sounds.push(Sound {key: *key, timing: timing, wav_id: SoundX {id: wav_id}});
-                    }
+                        if wav_id != 0 && wav_ids.contains(&wav_id) {
+                            sounds.push(Sound {key: *key, timing: timing, wav_id: SoundX {id: wav_id}});
+                        }
+                    };
                 };
             };
 

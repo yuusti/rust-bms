@@ -6,7 +6,7 @@ use std::collections::HashMap;
 
 pub struct BmsScript {
     headers: HashMap<String, String>,
-    channels: HashMap<String, String>,
+    channels: HashMap<String, Vec<String>>,
 }
 
 impl BmsScript {
@@ -14,7 +14,7 @@ impl BmsScript {
         unimplemented!()
     }
 
-    pub fn channels(&self) -> &HashMap<String, String> {
+    pub fn channels(&self) -> &HashMap<String, Vec<String>> {
         &self.channels
     }
 
@@ -22,7 +22,7 @@ impl BmsScript {
         &self.headers
     }
 
-    pub fn channel(&self, segment_id: &str, channel_id: &str) -> &str {
+    pub fn channel(&self, segment_id: &str, channel_id: &str) -> &Vec<String> {
         let key = format!("{0}{1}", segment_id, channel_id);
         self.channels.get(&key).unwrap()
     }
@@ -70,7 +70,10 @@ impl BmsParser for BmsStringParser {
                         if channel_re.is_match(&trimmed) {
                             let key = &line[1..6];
                             let value = &line[7..];
-                            channels.insert(key.to_string(), value.to_string());
+                            if !channels.contains_key(key) {
+                                channels.insert(key.to_string(), vec![]);
+                            }
+                            channels.get_mut(key).map(|x| x.push(value.to_string()));
                         } else {
                             let tokens: Vec<&str> = trimmed.split(' ').collect();
                             let key = &tokens.get(0).unwrap()[1..];
