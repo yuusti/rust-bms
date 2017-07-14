@@ -2,7 +2,7 @@ use std::fs::File;
 use std::io::prelude::*;
 use regex::Regex;
 use std::collections::HashMap;
-
+use time;
 
 pub struct BmsScript {
     headers: HashMap<String, String>,
@@ -56,6 +56,8 @@ struct BmsStringParser {
 
 impl BmsParser for BmsStringParser {
     fn parse(&self) -> BmsScript {
+        println!("Start BmsStringParser::parse() at {}", time::precise_time_s());
+
         let mut headers = HashMap::new();
         let mut channels = HashMap::new();
         for line in self.script.split('\n') {
@@ -85,6 +87,7 @@ impl BmsParser for BmsStringParser {
                 };
             };
         };
+        println!("Finish BmsStringParser::parse() at {}", time::precise_time_s());
         BmsScript { headers: headers, channels: channels }
     }
 }

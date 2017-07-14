@@ -3,6 +3,7 @@ use rand::{self, Rng};
 use bms_parser::{BmsParser, BmsFileParser, BmsScript};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use time;
 
 pub struct KeyMetadata {
     id: u32,
@@ -66,12 +67,6 @@ pub struct Sound {
     pub timing: f64,
     pub wav_id: SoundX,
 }
-
-// pub struct Sound<'a> {
-//    pub key: Key,
-//    pub timing: f64,
-//    pub handle: &'a ears::Sound,
-// }
 
 #[derive(PartialEq, PartialOrd)]
 pub struct BpmChange {
@@ -152,6 +147,7 @@ impl BmsFileLoader {
 
 impl BmsLoader for BmsFileLoader {
     fn load(&self) -> Bms {
+        println!("Start BmsFileLoader.load() at {}", time::precise_time_s());
         let script_parser = BmsFileParser { path: self.path.to_string() };
         let script = script_parser.parse();
 
@@ -185,7 +181,7 @@ impl BmsLoader for BmsFileLoader {
         for (key, value) in script.headers() {
             if key.starts_with("WAV") {
                 let wav_id = u32::from_str_radix(&key[3..5], 36).unwrap();
-                println!("{} {}", &value, path_path.with_file_name(&value).with_extension("ogg").as_path().to_str().unwrap());
+//                println!("{} {}", &value, path_path.with_file_name(&value).with_extension("ogg").as_path().to_str().unwrap());
                 music::bind_sound_file(SoundX {id: wav_id}, path_path.with_file_name(&value).with_extension("ogg").as_path().to_str().unwrap());
                 wav_ids.insert(wav_id);
             }
@@ -250,7 +246,7 @@ impl BmsLoader for BmsFileLoader {
                 let timing_delta = position_delta * beats * BmsFileLoader::beat_duration(current_segment_bpm);
                 let timing = previous_timing + timing_delta;
 
-                println!("{} {:?}", timing, event);
+//                println!("{} {:?}", timing, event);
 
                 match event.event {
                     BmsEventType::Bar => bars.push(timing),
@@ -270,6 +266,7 @@ impl BmsLoader for BmsFileLoader {
         };
 
         println!("notes: {}", sounds.len());
+        println!("Finish BmsFileLoader.load() at {}", time::precise_time_s());
 
         Bms { bpms: bpms, bars: bars, sounds: sounds }
     }

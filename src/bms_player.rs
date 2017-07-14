@@ -17,38 +17,37 @@ use ears::{AudioController};
 
 type Time = f64;
 
-pub struct BmsPlayer<'a> {
-    gl: GlGraphics,
-    textures: &'a Textures,
+pub struct BmsPlayer {
     speed: f64,
     bpm: f64,
     obj_index_by_key: HashMap<bms_loader::Key, usize>,
     event_index: usize,
-    objects_by_key: HashMap<bms_loader::Key, Vec<Draw<'a>>>,
+    objects_by_key: HashMap<bms_loader::Key, Vec<Draw>>,
     events: Vec<Event>,
     judge_index_by_key: HashMap<bms_loader::Key, usize>,
     pushed_key_set: HashSet<bms_loader::Key>,
     judge_display: JudgeDisplay,
     y_offset: f64,
     bpms: Vec<bms_loader::BpmChange>,
-    init_time: Option<f64>
+    init_time: Option<f64>,
+    textures_map: HashMap<TextureLabel, Texture>
 }
 
 #[inline]
-fn note_info(textures: &Textures, key: bms_loader::Key) -> Option<(f64, f64, &Texture)> {
+fn note_info(key: bms_loader::Key) -> Option<(f64, f64, TextureLabel)> {
     // x pos, size, color
     use bms_loader::Key;
     let x = key as u8;
 
     match key {
         Key::P1_KEY1 | Key::P1_KEY3 | Key::P1_KEY5 | Key::P1_KEY7 => {
-            Some((SCR_WIDTH + NOTES1_WIDTH * (x / 2) as f64 + NOTES2_WIDTH * ((x - 1) / 2) as f64 + OFFSET, NOTES1_WIDTH - OFFSET * 2.0, &textures.note_white))
+            Some((SCR_WIDTH + NOTES1_WIDTH * (x / 2) as f64 + NOTES2_WIDTH * ((x - 1) / 2) as f64 + OFFSET, NOTES1_WIDTH - OFFSET * 2.0, TextureLabel::NOTE_WHITE))
         }
         Key::P1_KEY2 | Key::P1_KEY4 | Key::P1_KEY6 => {
-            Some((SCR_WIDTH + NOTES1_WIDTH * (x / 2) as f64 + NOTES2_WIDTH * ((x - 1) / 2) as f64 + OFFSET, NOTES2_WIDTH - OFFSET * 2.0, &textures.note_blue))
+            Some((SCR_WIDTH + NOTES1_WIDTH * (x / 2) as f64 + NOTES2_WIDTH * ((x - 1) / 2) as f64 + OFFSET, NOTES2_WIDTH - OFFSET * 2.0, TextureLabel::NOTE_BLUE))
         }
         Key::P1_SCRATCH => {
-            Some((OFFSET, SCR_WIDTH - OFFSET * 2.0, &textures.note_red))
+            Some((OFFSET, SCR_WIDTH - OFFSET * 2.0, TextureLabel::NOTE_RED))
         }
         _ => None,
     }
@@ -110,14 +109,14 @@ pub fn test_calc_position () {
     assert!(f64_eq(7000f64, calc_position(30f64, &bpms)));
 }
 
-impl<'a> BmsPlayer<'a> {
+impl BmsPlayer {
     pub fn new(
-        gl: GlGraphics,
-        textures: &'a Textures,
+        textures_map: HashMap<TextureLabel, Texture>,
         bms: Bms,
         time: Time,
         speed: f64,
-    ) -> BmsPlayer<'a> {
+    ) -> BmsPlayer {
+        println!("Start BmsPlayer Initialization at {}", time::precise_time_s());
         let mut objects_by_key = HashMap::new();
         for key in bms_loader::Key::visible_keys() {
             objects_by_key.insert(key, vec![]);
@@ -126,8 +125,8 @@ impl<'a> BmsPlayer<'a> {
         let mut events = vec![];
         for sound in bms.sounds {
             if bms_loader::Key::visible_keys().contains(&sound.key) {
-                if let Some((x, width, texture)) = note_info(&textures, sound.key) {
-                    objects_by_key.get_mut(&sound.key).unwrap().push(Draw { timing: sound.timing, x: x, y: calc_position(sound.timing, &bms.bpms) , width: width, height: NOTES_HEIGHT, texture: &texture, wav_id: Some(sound.wav_id) });
+                if let Some((x, width, texture_label)) = note_info(sound.key) {
+                    objects_by_key.get_mut(&sound.key).unwrap().push(Draw { timing: sound.timing, x: x, y: calc_position(sound.timing, &bms.bpms) , width: width, height: NOTES_HEIGHT, texture_label: texture_label, wav_id: Some(sound.wav_id) });
                 }
             } else if sound.key == bms_loader::Key::BACK_CHORUS {
                 events.push(Event { timing: sound.timing, event_type: EventType::PlaySound(sound) });
@@ -136,7 +135,7 @@ impl<'a> BmsPlayer<'a> {
 
         objects_by_key.insert(bms_loader::Key::BACK_CHORUS, vec![]);
         for bar in bms.bars.iter() {
-            objects_by_key.get_mut(&bms_loader::Key::BACK_CHORUS).unwrap().push(Draw { timing: *bar, x: 0.0, y: calc_position(*bar, &bms.bpms), width: 1000.0, height: BAR_HEIGHT, texture: &textures.background, wav_id: None });
+            objects_by_key.get_mut(&bms_loader::Key::BACK_CHORUS).unwrap().push(Draw { timing: *bar, x: 0.0, y: calc_position(*bar, &bms.bpms), width: 1000.0, height: BAR_HEIGHT, texture_label: TextureLabel::BACKGROUND, wav_id: None });
         }
 
         let mut obj_index_by_key = HashMap::new();
@@ -150,9 +149,8 @@ impl<'a> BmsPlayer<'a> {
         }
         events.sort_by(|a, b| a.timing.partial_cmp(&b.timing).unwrap());
 
+        println!("Finish BmsPlayer Initialization at {}", time::precise_time_s());
         BmsPlayer {
-            gl: gl,
-            textures: textures,
             speed: speed,
             bpm: 130f64,
             obj_index_by_key: obj_index_by_key.clone(),
@@ -164,11 +162,12 @@ impl<'a> BmsPlayer<'a> {
             judge_display: JudgeDisplay::new(),
             y_offset: 0f64,
             bpms: bms.bpms,
-            init_time: None
+            init_time: None,
+            textures_map: textures_map
         }
     }
 
-    pub fn run(&mut self, window: &mut Window) {
+    pub fn run(&mut self, window: &mut Window, gl :&mut GlGraphics) {
         let mut events = Events::new(EventSettings::new());
 
         music::set_volume(music::MAX_VOLUME);
@@ -178,7 +177,7 @@ impl<'a> BmsPlayer<'a> {
             }
 
             if let Some(r) = e.render_args() {
-                self.render(&r);
+                self.render(&r, gl);
             }
 
             if let Some(Button::Keyboard(key)) = e.press_args() {
@@ -193,14 +192,13 @@ impl<'a> BmsPlayer<'a> {
         }
     }
 
-    fn render(&mut self, args: &RenderArgs) {
+    fn render(&mut self, args: &RenderArgs, gl :&mut GlGraphics) {
         let pt = self.get_precise_time();
         self.y_offset = calc_position(pt, &self.bpms);
 
         use graphics::*;
 
-        let background = &self.textures.background;
-        let lane_bg = &self.textures.lane_bg;
+        let textures_map = &self.textures_map;
 
         let width = args.width as f64;
         let height = args.height as f64;
@@ -217,7 +215,7 @@ impl<'a> BmsPlayer<'a> {
                 if y > height {
                     next_start += 1;
                 } else {
-                    drawings.push(DrawInfo { x: draw.x, y: y - NOTES_HEIGHT, width: draw.width, height: draw.height, texture: draw.texture });
+                    drawings.push(DrawInfo { x: draw.x, y: y - NOTES_HEIGHT, width: draw.width, height: draw.height, texture_label: draw.texture_label });
                 }
                 if y < 0.0 {
                     break;
@@ -228,34 +226,34 @@ impl<'a> BmsPlayer<'a> {
 
         let judge_texture = if self.judge_display.show_until <= 0.0 { None } else {
             match self.judge_display.judge {
-                Some(Judge::PGREAT) => Some(&self.textures.judge_perfect),
-                Some(Judge::GREAT) => Some(&self.textures.judge_great),
-                Some(Judge::GOOD) => Some(&self.textures.judge_good),
-                Some(Judge::BAD) => Some(&self.textures.judge_bad),
-                Some(Judge::POOR) => Some(&self.textures.judge_poor),
+                Some(Judge::PGREAT) => Some(TextureLabel::JUDGE_PERFECT),
+                Some(Judge::GREAT) => Some(TextureLabel::JUDGE_GREAT),
+                Some(Judge::GOOD) => Some(TextureLabel::JUDGE_GOOD),
+                Some(Judge::BAD) => Some(TextureLabel::JUDGE_BAD),
+                Some(Judge::POOR) => Some(TextureLabel::JUDGE_POOR),
                 _ => None,
             }
         };
 
-        self.gl.draw(args.viewport(), |c, gl| {
+        gl.draw(args.viewport(), |c, gl| {
             // back ground
             let image = Image::new().rect(rectangle::rectangle_by_corners(0.0, 0.0, width, height));
-            image.draw(background, &DrawState::new_alpha(), c.transform, gl);
+            image.draw(&textures_map[&TextureLabel::BACKGROUND], &DrawState::new_alpha(), c.transform, gl);
 
             // lanes
             let image = Image::new().rect(rectangle::rectangle_by_corners(0.0, 0.0, SCR_WIDTH + NOTES1_WIDTH * 4.0 + NOTES2_WIDTH * 3.0, height));
-            image.draw(lane_bg, &DrawState::new_alpha(), c.transform, gl);
+            image.draw(&textures_map[&TextureLabel::LANE_BG], &DrawState::new_alpha(), c.transform, gl);
 
             // drawable objects
             for draw in &drawings {
                 let image = Image::new().rect(rectangle::rectangle_by_corners(0.0, 0.0, draw.width, draw.height));
-                image.draw(draw.texture, &DrawState::new_alpha(), c.transform.trans(draw.x, draw.y - draw.height / 2.0), gl);
+                image.draw(&textures_map[&draw.texture_label], &DrawState::new_alpha(), c.transform.trans(draw.x, draw.y - draw.height / 2.0), gl);
             }
 
             // judge
-            if let Some(texture) = judge_texture {
+            if let Some(texture_label) = judge_texture {
                 let image = Image::new().rect(rectangle::rectangle_by_corners(0.0, 0.0, width / 3.0, height / 3.0));
-                image.draw(texture, &DrawState::new_alpha(), c.transform.trans(width - width / 3.0, height / 2.0), gl);
+                image.draw(&textures_map[&texture_label], &DrawState::new_alpha(), c.transform.trans(width - width / 3.0, height / 2.0), gl);
             }
         });
     }
@@ -385,36 +383,37 @@ enum EventType {
 }
 
 #[derive(Clone)]
-struct Draw<'a> {
+struct Draw {
     pub timing: Time,
     pub y: f64,
     pub x: f64,
     pub width: f64,
     pub height: f64,
-    pub texture: &'a Texture,
+    pub texture_label: TextureLabel,
     pub wav_id: Option<bms_loader::SoundX>
 
 }
 
-struct DrawInfo<'a> {
+struct DrawInfo {
     pub x: f64,
     pub y: f64,
     pub width: f64,
     pub height: f64,
-    pub texture: &'a Texture,
+    pub texture_label: TextureLabel,
 }
 
-pub struct Textures {
-    pub background: Texture,
-    pub lane_bg: Texture,
-    pub note_blue: Texture,
-    pub note_red: Texture,
-    pub note_white: Texture,
-    pub judge_perfect: Texture,
-    pub judge_great: Texture,
-    pub judge_good: Texture,
-    pub judge_bad: Texture,
-    pub judge_poor: Texture,
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub enum TextureLabel {
+    BACKGROUND,
+    LANE_BG,
+    NOTE_BLUE,
+    NOTE_RED,
+    NOTE_WHITE,
+    JUDGE_PERFECT,
+    JUDGE_GREAT,
+    JUDGE_GOOD,
+    JUDGE_BAD,
+    JUDGE_POOR,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Copy, Clone)]
