@@ -1,7 +1,7 @@
 extern crate music;
 use rand::{self, Rng};
 use bms_parser::{BmsParser, BmsFileParser, BmsScript};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 pub struct KeyMetadata {
@@ -148,11 +148,13 @@ impl BmsLoader for BmsFileLoader {
         ];
 
         let path_path = Path::new(&self.path);
+        let mut wav_ids: HashSet<u32> = HashSet::new();
         for (key, value) in script.headers() {
             if key.starts_with("WAV") {
-                //let filename = path_path.with_file_name(&value).with_extension("ogg").as_path().to_str().unwrap();
+                let wav_id = u32::from_str_radix(&key[3..5], 36).unwrap();
                 println!("{} {}", &value, path_path.with_file_name(&value).with_extension("ogg").as_path().to_str().unwrap());
-                music::bind_sound_file(SoundX {id: u32::from_str_radix(&key[3..5], 36).unwrap()}, path_path.with_file_name(&value).with_extension("ogg").as_path().to_str().unwrap());
+                music::bind_sound_file(SoundX {id: wav_id}, path_path.with_file_name(&value).with_extension("ogg").as_path().to_str().unwrap());
+                wav_ids.insert(wav_id);
             }
         }
 
@@ -182,12 +184,11 @@ impl BmsLoader for BmsFileLoader {
                 let notes_interval = segment_duration / (notes as f64);
 
                 for idx in 0..notes {
-                    let wav_id = &channel_commands[2*idx..(2*idx + 2)];
+                    let wav_id = u32::from_str_radix(&channel_commands[2*idx..(2*idx + 2)], 36).unwrap();
                     let timing = segment_head + (idx as f64) * notes_interval;
 
-                    if wav_id != "00" {
-                        println!("{} {}", wav_id, timing);
-                        sounds.push(Sound {key: *key, timing: timing, wav_id: SoundX {id: u32::from_str_radix(wav_id, 36).unwrap()}});
+                    if wav_id != 0 && wav_ids.contains(&wav_id) {
+                        sounds.push(Sound {key: *key, timing: timing, wav_id: SoundX {id: wav_id}});
                     }
                 };
             };

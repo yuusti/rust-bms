@@ -68,13 +68,14 @@ impl<'a> BmsPlayer<'a> {
 
         let mut events = vec![];
         for sound in bms.sounds {
-            println!("Z {:?}", sound.key);
             if objects_by_key.contains_key(&sound.key) {
                 if let Some((x, width, texture)) = note_info(&textures, sound.key) {
                     objects_by_key.get_mut(&sound.key).unwrap().push(Draw {timing: sound.timing, x: x, width: width, height: NOTES_HEIGHT, texture: &texture });
+                    println!("A {:?} {} {}", sound.key, sound.timing, &sound.wav_id.id);
+                    events.push(Event { timing: sound.timing, event_type: EventType::PlaySound(sound) });
                 }
-            } else {
-                println!("A {} {}", sound.timing, &sound.wav_id.id);
+            } else if sound.key == bms_loader::Key::BACK_CHORUS {
+                println!("A {:?} {} {}", sound.key, sound.timing, &sound.wav_id.id);
                 events.push(Event { timing: sound.timing, event_type: EventType::PlaySound(sound) });
             }
         }
@@ -110,10 +111,8 @@ impl<'a> BmsPlayer<'a> {
 
     pub fn run(&mut self, window: &mut Window) {
         let mut events = Events::new(EventSettings::new());
-        //music::bind_sound_file(SoundX::A, "./a.wav");
 
         music::set_volume(music::MAX_VOLUME);
-        //music::play_sound(&SoundX::A, music::Repeat::Times(1));
         while let Some(e) = events.next(window) {
             if let Some(r) = e.render_args() {
                 self.render(&r);
