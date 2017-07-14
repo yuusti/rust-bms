@@ -63,7 +63,7 @@ fn main() {
         judge_poor: Texture::from_path(Path::new("resource/judge_poor.png")).unwrap()
     };
 
-    let loader = bms_loader::BmsFileLoader::new("example/conflict/_03_conflict.bme");
+    let loader = bms_loader::BmsFileLoader::new("example/AltMirrorBell/AltMirroBell_MX.bme");
 
     use bms_loader::BmsLoader;
 
@@ -77,7 +77,6 @@ fn main() {
             200.0
         );
 
-    //    play_sound("resource/loop.wav");
         bms_player.run(&mut window);
     });
 }
