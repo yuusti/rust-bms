@@ -105,7 +105,6 @@ impl<'a> BmsPlayer<'a> {
                     objects_by_key.get_mut(&sound.key).unwrap().push(Draw { timing: sound.timing, x: x, y: calc_initial_position(sound.timing, &bms.bpms) , width: width, height: NOTES_HEIGHT, texture: &texture, wav_id: Some(sound.wav_id) });
                 }
             } else if sound.key == bms_loader::Key::BACK_CHORUS {
-                println!("A {:?} {} {}", sound.key, sound.timing, &sound.wav_id.id);
                 events.push(Event { timing: sound.timing, event_type: EventType::PlaySound(sound) });
             }
         }
@@ -206,7 +205,6 @@ impl<'a> BmsPlayer<'a> {
                         self.bpm = *x;
                     }
                     EventType::PlaySound(ref snd) => {
-                        println!("B {}", &snd.wav_id.id);
                         music::play_sound(&snd.wav_id, music::Repeat::Times(0));
                     }
                 }
@@ -289,16 +287,13 @@ impl<'a> BmsPlayer<'a> {
         if let Some(note_key) = down {
             if !self.pushed_key_set.contains(&note_key) {
                 self.pushed_key_set.insert(note_key);
-                println!("key {:?} pressed", note_key);
 
                 while let Some(mut index) = self.judge_index_by_key.get_mut(&note_key) {
                     if let Some(draw) = self.objects_by_key[&note_key].get(*index) {
                         let timing = draw.timing;
                         if self.time <= timing + 0.1 {
                             let time_diff = timing - self.time;
-                            println!("timing={} ({})", time_diff, if time_diff < 0.0 { "SLOW" } else { "FAST" });
                             if let Some(judge) = Judge::get_judge(f64::abs(time_diff)) {
-                                println!("{:?}", judge);
                                 self.judge_display.update_judge(judge);
                                 *index += 1;
                             }
