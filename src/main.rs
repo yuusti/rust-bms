@@ -74,7 +74,7 @@ fn main() {
             &textures,
             loader.load(),
             0.0,
-            200.0
+            1.0
         );
 
         bms_player.run(&mut window);

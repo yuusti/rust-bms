@@ -27,6 +27,7 @@ pub struct BmsPlayer<'a> {
     judge_index_by_key: HashMap<bms_loader::Key, usize>,
     pushed_key_set: HashSet<bms_loader::Key>,
     judge_display: JudgeDisplay,
+    y_offset: f64,
 }
 
 #[inline]
@@ -56,6 +57,34 @@ const NOTES_HEIGHT: f64 = 10.0;
 const BAR_HEIGHT: f64 = 1.0;
 const OFFSET: f64 = 2.5;
 
+fn calc_initial_position(t: Time, bpms: &Vec<bms_loader::BpmChange>) -> f64 {
+    let mut y = 0f64;
+    let mut p_bpm = 130f64;
+    let mut p_timing = 0f64;
+    for bpm in bpms {
+        let d = if bpm.timing < t {
+            bpm.timing - p_timing
+        } else if t - p_timing > 0f64 {
+            t - p_timing
+        } else {
+            0f64
+        };
+        if d <= 0f64 {
+            break;
+        }
+        y += d * p_bpm;
+        p_bpm = bpm.bpm;
+        p_timing = bpm.timing;
+    }
+    y += if t - p_timing > 0f64 {
+        t - p_timing
+    } else {
+        0f64
+    } * p_bpm;
+
+    y
+}
+
 impl<'a> BmsPlayer<'a> {
     pub fn new(
         gl: GlGraphics,
@@ -73,7 +102,7 @@ impl<'a> BmsPlayer<'a> {
         for sound in bms.sounds {
             if bms_loader::Key::visible_keys().contains(&sound.key) {
                 if let Some((x, width, texture)) = note_info(&textures, sound.key) {
-                    objects_by_key.get_mut(&sound.key).unwrap().push(Draw { timing: sound.timing, x: x, width: width, height: NOTES_HEIGHT, texture: &texture, wav_id: Some(sound.wav_id) });
+                    objects_by_key.get_mut(&sound.key).unwrap().push(Draw { timing: sound.timing, x: x, y: calc_initial_position(sound.timing, &bms.bpms) , width: width, height: NOTES_HEIGHT, texture: &texture, wav_id: Some(sound.wav_id) });
                 }
             } else if sound.key == bms_loader::Key::BACK_CHORUS {
                 println!("A {:?} {} {}", sound.key, sound.timing, &sound.wav_id.id);
@@ -83,7 +112,7 @@ impl<'a> BmsPlayer<'a> {
 
         objects_by_key.insert(bms_loader::Key::BACK_CHORUS, vec![]);
         for bar in bms.bars.iter() {
-            objects_by_key.get_mut(&bms_loader::Key::BACK_CHORUS).unwrap().push(Draw { timing: *bar, x: 0.0, width: 1000.0, height: BAR_HEIGHT, texture: &textures.background, wav_id: None });
+            objects_by_key.get_mut(&bms_loader::Key::BACK_CHORUS).unwrap().push(Draw { timing: *bar, x: 0.0, y: calc_initial_position(*bar, &bms.bpms), width: 1000.0, height: BAR_HEIGHT, texture: &textures.background, wav_id: None });
         }
 
         let mut obj_index_by_key = HashMap::new();
@@ -109,7 +138,8 @@ impl<'a> BmsPlayer<'a> {
             events: events,
             judge_index_by_key: obj_index_by_key.clone(),
             pushed_key_set: HashSet::new(),
-            judge_display: JudgeDisplay::new()
+            judge_display: JudgeDisplay::new(),
+            y_offset: 0f64
         }
     }
 
@@ -136,11 +166,6 @@ impl<'a> BmsPlayer<'a> {
         }
     }
 
-    #[inline]
-    fn calc_pos(arrival_time: Time, current_time: Time, bpm: f64, speed: f64) -> f64 {
-        (arrival_time - current_time) * bpm / 240f64 * speed
-    }
-
     fn render(&mut self, args: &RenderArgs) {
         use graphics::*;
 
@@ -156,7 +181,8 @@ impl<'a> BmsPlayer<'a> {
             let start = *self.obj_index_by_key.get(key).unwrap();
             let mut next_start = start;
             for draw in &objects[start..objects.len()] {
-                let y = height - NOTES_HEIGHT - Self::calc_pos(draw.timing, self.time, self.bpm, self.speed);
+                let y = (draw.y - self.y_offset) * self.speed;
+                let y = height - NOTES_HEIGHT - y;
 
                 if y > height {
                     next_start += 1;
@@ -229,6 +255,7 @@ impl<'a> BmsPlayer<'a> {
             self.bpm = 1.0;
         }
 
+        self.y_offset += args.dt * self.bpm;
 
         self.judge_display.update_time(args.dt);
     }
@@ -244,15 +271,15 @@ impl<'a> BmsPlayer<'a> {
             Key::F => Some(bms_loader::Key::P1_KEY6),
             Key::V => Some(bms_loader::Key::P1_KEY7),
             Key::Up => {
-                self.speed += 10.0;
+                self.speed += 0.1;
                 None
             }
             Key::Down => {
-                self.speed -= 10.0;
+                self.speed -= 0.1;
                 None
             }
             Key::Space => {
-                self.speed = self.bpm * 12.5;
+                self.speed = 10.0 / self.bpm;
                 None
             }
             _ => None,
@@ -325,6 +352,7 @@ enum EventType {
 #[derive(Clone)]
 struct Draw<'a> {
     pub timing: Time,
+    pub y: f64,
     pub x: f64,
     pub width: f64,
     pub height: f64,
