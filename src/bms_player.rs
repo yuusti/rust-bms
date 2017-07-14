@@ -1,4 +1,7 @@
 extern crate music;
+
+use time;
+
 use piston::window::WindowSettings;
 use piston::event_loop::*;
 use piston::input::*;
@@ -17,7 +20,6 @@ type Time = f64;
 pub struct BmsPlayer<'a> {
     gl: GlGraphics,
     textures: &'a Textures,
-    time: Time,
     speed: f64,
     bpm: f64,
     obj_index_by_key: HashMap<bms_loader::Key, usize>,
@@ -28,6 +30,8 @@ pub struct BmsPlayer<'a> {
     pushed_key_set: HashSet<bms_loader::Key>,
     judge_display: JudgeDisplay,
     y_offset: f64,
+    bpms: Vec<bms_loader::BpmChange>,
+    init_time: Option<f64>
 }
 
 #[inline]
@@ -57,7 +61,7 @@ const NOTES_HEIGHT: f64 = 10.0;
 const BAR_HEIGHT: f64 = 1.0;
 const OFFSET: f64 = 2.5;
 
-fn calc_initial_position(t: Time, bpms: &Vec<bms_loader::BpmChange>) -> f64 {
+fn calc_position(t: Time, bpms: &Vec<bms_loader::BpmChange>) -> f64 {
     let mut y = 0f64;
     let mut p_bpm = 130f64;
     let mut p_timing = 0f64;
@@ -102,7 +106,7 @@ impl<'a> BmsPlayer<'a> {
         for sound in bms.sounds {
             if bms_loader::Key::visible_keys().contains(&sound.key) {
                 if let Some((x, width, texture)) = note_info(&textures, sound.key) {
-                    objects_by_key.get_mut(&sound.key).unwrap().push(Draw { timing: sound.timing, x: x, y: calc_initial_position(sound.timing, &bms.bpms) , width: width, height: NOTES_HEIGHT, texture: &texture, wav_id: Some(sound.wav_id) });
+                    objects_by_key.get_mut(&sound.key).unwrap().push(Draw { timing: sound.timing, x: x, y: calc_position(sound.timing, &bms.bpms) , width: width, height: NOTES_HEIGHT, texture: &texture, wav_id: Some(sound.wav_id) });
                 }
             } else if sound.key == bms_loader::Key::BACK_CHORUS {
                 events.push(Event { timing: sound.timing, event_type: EventType::PlaySound(sound) });
@@ -111,7 +115,7 @@ impl<'a> BmsPlayer<'a> {
 
         objects_by_key.insert(bms_loader::Key::BACK_CHORUS, vec![]);
         for bar in bms.bars.iter() {
-            objects_by_key.get_mut(&bms_loader::Key::BACK_CHORUS).unwrap().push(Draw { timing: *bar, x: 0.0, y: calc_initial_position(*bar, &bms.bpms), width: 1000.0, height: BAR_HEIGHT, texture: &textures.background, wav_id: None });
+            objects_by_key.get_mut(&bms_loader::Key::BACK_CHORUS).unwrap().push(Draw { timing: *bar, x: 0.0, y: calc_position(*bar, &bms.bpms), width: 1000.0, height: BAR_HEIGHT, texture: &textures.background, wav_id: None });
         }
 
         let mut obj_index_by_key = HashMap::new();
@@ -128,7 +132,6 @@ impl<'a> BmsPlayer<'a> {
         BmsPlayer {
             gl: gl,
             textures: textures,
-            time: time,
             speed: speed,
             bpm: 130f64,
             obj_index_by_key: obj_index_by_key.clone(),
@@ -138,7 +141,9 @@ impl<'a> BmsPlayer<'a> {
             judge_index_by_key: obj_index_by_key.clone(),
             pushed_key_set: HashSet::new(),
             judge_display: JudgeDisplay::new(),
-            y_offset: 0f64
+            y_offset: 0f64,
+            bpms: bms.bpms,
+            init_time: None
         }
     }
 
@@ -147,12 +152,12 @@ impl<'a> BmsPlayer<'a> {
 
         music::set_volume(music::MAX_VOLUME);
         while let Some(e) = events.next(window) {
-            if let Some(r) = e.render_args() {
-                self.render(&r);
-            }
-
             if let Some(u) = e.update_args() {
                 self.update(&u);
+            }
+
+            if let Some(r) = e.render_args() {
+                self.render(&r);
             }
 
             if let Some(Button::Keyboard(key)) = e.press_args() {
@@ -162,10 +167,15 @@ impl<'a> BmsPlayer<'a> {
             if let Some(Button::Keyboard(key)) = e.release_args() {
                 self.on_key_up(&key);
             }
+
+            self.process_event();
         }
     }
 
     fn render(&mut self, args: &RenderArgs) {
+        let pt = self.get_precise_time();
+        self.y_offset = calc_position(pt, &self.bpms);
+
         use graphics::*;
 
         let background = &self.textures.background;
@@ -181,12 +191,12 @@ impl<'a> BmsPlayer<'a> {
             let mut next_start = start;
             for draw in &objects[start..objects.len()] {
                 let y = (draw.y - self.y_offset) * self.speed;
-                let y = height - NOTES_HEIGHT - y;
+                let y = height - y;
 
                 if y > height {
                     next_start += 1;
                 } else {
-                    drawings.push(DrawInfo { x: draw.x, y: y, width: draw.width, height: draw.height, texture: draw.texture });
+                    drawings.push(DrawInfo { x: draw.x, y: y - NOTES_HEIGHT, width: draw.width, height: draw.height, texture: draw.texture });
                 }
                 if y < 0.0 {
                     break;
@@ -195,25 +205,7 @@ impl<'a> BmsPlayer<'a> {
             *self.obj_index_by_key.get_mut(key).unwrap() = next_start;
         }
 
-        // process events
-        let start = self.event_index;
-        for event in &self.events[start..self.events.len()] {
-            if event.timing <= self.time {
-                self.event_index += 1;
-                match event.event_type {
-                    EventType::ChangeBpm(ref x) => {
-                        self.bpm = *x;
-                    }
-                    EventType::PlaySound(ref snd) => {
-                        music::play_sound(&snd.wav_id, music::Repeat::Times(0));
-                    }
-                }
-            } else {
-                break;
-            }
-        }
-
-        let judge_texture = if self.judge_display.t <= 0.0 { None } else {
+        let judge_texture = if self.judge_display.show_until <= 0.0 { None } else {
             match self.judge_display.judge {
                 Some(Judge::PGREAT) => Some(&self.textures.judge_perfect),
                 Some(Judge::GREAT) => Some(&self.textures.judge_great),
@@ -248,14 +240,9 @@ impl<'a> BmsPlayer<'a> {
     }
 
     fn update(&mut self, args: &UpdateArgs) {
-        self.time += args.dt;
         if self.bpm < 1.0 {
             self.bpm = 1.0;
         }
-
-        self.y_offset += args.dt * self.bpm;
-
-        self.judge_display.update_time(args.dt);
     }
 
     fn on_key_down(&mut self, key: &Key) {
@@ -277,7 +264,6 @@ impl<'a> BmsPlayer<'a> {
                 None
             }
             Key::Space => {
-                self.speed = 10.0 / self.bpm;
                 None
             }
             _ => None,
@@ -285,16 +271,17 @@ impl<'a> BmsPlayer<'a> {
 
         // judge
         if let Some(note_key) = down {
+            let pt = self.get_precise_time();
             if !self.pushed_key_set.contains(&note_key) {
                 self.pushed_key_set.insert(note_key);
 
                 while let Some(mut index) = self.judge_index_by_key.get_mut(&note_key) {
                     if let Some(draw) = self.objects_by_key[&note_key].get(*index) {
                         let timing = draw.timing;
-                        if self.time <= timing + 0.1 {
-                            let time_diff = timing - self.time;
+                        if pt <= timing + 0.1 {
+                            let time_diff = timing - pt;
                             if let Some(judge) = Judge::get_judge(f64::abs(time_diff)) {
-                                self.judge_display.update_judge(judge);
+                                self.judge_display.update_judge(judge, pt);
                                 *index += 1;
                             }
                             if let Some(wav_id) = draw.wav_id {
@@ -307,6 +294,38 @@ impl<'a> BmsPlayer<'a> {
                 }
             }
         }
+    }
+
+    pub fn get_precise_time(&mut self) -> f64 {
+        if let Some(init_t) = self.init_time {
+            (time::precise_time_s() - init_t) as f64
+        } else {
+            self.init_time = Some(time::precise_time_s());
+            0.0f64
+        }
+    }
+
+    pub fn process_event(&mut self) {
+        let pt = self.get_precise_time();
+        // process events
+        let start = self.event_index;
+        for event in &self.events[start..self.events.len()] {
+            if event.timing <= pt {
+                self.event_index += 1;
+                match event.event_type {
+                    EventType::ChangeBpm(ref x) => {
+                        self.bpm = *x;
+                    }
+                    EventType::PlaySound(ref snd) => {
+                        music::play_sound(&snd.wav_id, music::Repeat::Times(0));
+                        println!("sound: expected = {}, actual = {}", event.timing, pt);
+                    }
+                }
+            } else {
+                break;
+            }
+        }
+
     }
 
     fn on_key_up(&mut self, key: &Key) {
@@ -415,24 +434,17 @@ impl Judge {
 
 struct JudgeDisplay {
     judge: Option<Judge>,
-    t: Time,
+    pub show_until: Time,
     count: HashMap<Judge, u32>,
     combo: u32
 }
 
 impl JudgeDisplay {
     pub fn new() -> JudgeDisplay {
-        JudgeDisplay{judge: None, t: 0.0, count: HashMap::new(), combo: 0u32 }
+        JudgeDisplay{judge: None, show_until: 0.0, count: HashMap::new(), combo: 0u32 }
     }
 
-    pub fn update_time(&mut self, dt: Time) {
-        self.t -= dt;
-        if (self.t < 0.0) {
-            self.t = 0.0;
-        }
-    }
-
-    pub fn update_judge(&mut self, judge: Judge) {
+    pub fn update_judge(&mut self, judge: Judge, t: Time) {
         if let Some(prev) = self.judge {
             if Judge::combo_lasts(prev) && Judge::combo_lasts(judge) {
                 self.combo += 1;
@@ -442,6 +454,6 @@ impl JudgeDisplay {
         }
         *self.count.entry(judge).or_insert(0) += 1;
         self.judge = Some(judge);
-        self.t = 1.0;
+        self.show_until = t + 1.0;
     }
 }

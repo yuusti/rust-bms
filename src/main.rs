@@ -7,6 +7,7 @@ extern crate rand;
 extern crate regex;
 extern crate music;
 extern crate sdl2;
+extern crate time;
 
 use piston::window::WindowSettings;
 use glutin_window::GlutinWindow as Window;
