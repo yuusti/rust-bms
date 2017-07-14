@@ -73,7 +73,7 @@ fn calc_position(t: Time, bpms: &Vec<bms_loader::BpmChange>) -> f64 {
         } else {
             0f64
         };
-        if d <= 0f64 {
+        if d < 0f64 {
             break;
         }
         y += d * p_bpm;
@@ -87,6 +87,27 @@ fn calc_position(t: Time, bpms: &Vec<bms_loader::BpmChange>) -> f64 {
     } * p_bpm;
 
     y
+}
+
+pub fn f64_eq(a: f64, b: f64) -> bool {
+    f64::abs(a-b) < 1e-9
+}
+
+#[test]
+pub fn test_calc_position () {
+    let bpms = vec![
+        bms_loader::BpmChange{timing: 0f64,bpm: 100f64},
+        bms_loader::BpmChange{timing: 10f64,bpm: 200f64},
+        bms_loader::BpmChange{timing: 20f64,bpm: 400f64},
+    ];
+
+    assert!(f64_eq(0f64, calc_position(0f64, &bpms)));
+    assert!(f64_eq(500f64, calc_position(5f64, &bpms)));
+    assert!(f64_eq(1000f64, calc_position(10f64, &bpms)));
+    assert!(f64_eq(2000f64, calc_position(15f64, &bpms)));
+    assert!(f64_eq(3000f64, calc_position(20f64, &bpms)));
+    assert!(f64_eq(5000f64, calc_position(25f64, &bpms)));
+    assert!(f64_eq(7000f64, calc_position(30f64, &bpms)));
 }
 
 impl<'a> BmsPlayer<'a> {
@@ -318,7 +339,7 @@ impl<'a> BmsPlayer<'a> {
                     }
                     EventType::PlaySound(ref snd) => {
                         music::play_sound(&snd.wav_id, music::Repeat::Times(0));
-                        println!("sound: expected = {}, actual = {}", event.timing, pt);
+//                        println!("sound: expected = {}, actual = {}", event.timing, pt);
                     }
                 }
             } else {
