@@ -16,6 +16,7 @@ use std::path::Path;
 use ears::{Sound, AudioController};
 use std::thread;
 use sdl2::mixer;
+use std::env;
 
 mod bms_parser;
 mod bms_player;
@@ -63,7 +64,8 @@ fn main() {
         judge_poor: Texture::from_path(Path::new("resource/judge_poor.png")).unwrap()
     };
 
-    let loader = bms_loader::BmsFileLoader::new("example/AltMirrorBell/AltMirroBell_MX.bme");
+    let script_path = env::args().nth(1).expect("pass script path to first argument");
+    let loader = bms_loader::BmsFileLoader::new(&script_path);
 
     use bms_loader::BmsLoader;
 
