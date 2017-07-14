@@ -73,7 +73,7 @@ impl<'a> BmsPlayer<'a> {
         for sound in bms.sounds {
             if bms_loader::Key::visible_keys().contains(&sound.key) {
                 if let Some((x, width, texture)) = note_info(&textures, sound.key) {
-                    objects_by_key.get_mut(&sound.key).unwrap().push(Draw { timing: sound.timing, x: x, width: width, height: NOTES_HEIGHT, texture: &texture });
+                    objects_by_key.get_mut(&sound.key).unwrap().push(Draw { timing: sound.timing, x: x, width: width, height: NOTES_HEIGHT, texture: &texture, wav_id: Some(sound.wav_id) });
                 }
             } else if sound.key == bms_loader::Key::BACK_CHORUS {
                 println!("A {:?} {} {}", sound.key, sound.timing, &sound.wav_id.id);
@@ -83,7 +83,7 @@ impl<'a> BmsPlayer<'a> {
 
         objects_by_key.insert(bms_loader::Key::BACK_CHORUS, vec![]);
         for bar in bms.bars.iter() {
-            objects_by_key.get_mut(&bms_loader::Key::BACK_CHORUS).unwrap().push(Draw { timing: *bar, x: 0.0, width: 1000.0, height: BAR_HEIGHT, texture: &textures.background });
+            objects_by_key.get_mut(&bms_loader::Key::BACK_CHORUS).unwrap().push(Draw { timing: *bar, x: 0.0, width: 1000.0, height: BAR_HEIGHT, texture: &textures.background, wav_id: None });
         }
 
         let mut obj_index_by_key = HashMap::new();
@@ -272,6 +272,9 @@ impl<'a> BmsPlayer<'a> {
                                 self.judge_display.update_judge(judge);
                                 *index += 1;
                             }
+                            if let Some(wav_id) = draw.wav_id {
+                                music::play_sound(&wav_id, music::Repeat::Times(0));
+                            }
                             break;
                         }
                     }
@@ -292,11 +295,9 @@ impl<'a> BmsPlayer<'a> {
             Key::F => Some(bms_loader::Key::P1_KEY6),
             Key::V => Some(bms_loader::Key::P1_KEY7),
             Key::Up => {
-                self.speed += 10.0;
                 None
             }
             Key::Down => {
-                self.speed -= 10.0;
                 None
             }
             _ => None,
@@ -325,6 +326,8 @@ struct Draw<'a> {
     pub width: f64,
     pub height: f64,
     pub texture: &'a Texture,
+    pub wav_id: Option<bms_loader::SoundX>
+
 }
 
 struct DrawInfo<'a> {
