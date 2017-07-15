@@ -30,7 +30,8 @@ pub struct BmsPlayer {
     y_offset: f64,
     bpms: Vec<bms_loader::BpmChange>,
     init_time: Option<f64>,
-    textures_map: HashMap<TextureLabel, Texture>
+    textures_map: HashMap<TextureLabel, Texture>,
+    key_mapping: HashMap<Key, bms_loader::Key>,
 }
 
 #[inline]
@@ -48,6 +49,26 @@ fn note_info(key: bms_loader::Key) -> Option<(f64, f64, TextureLabel)> {
         }
         Key::P1_SCRATCH => {
             Some((OFFSET, SCR_WIDTH - OFFSET * 2.0, TextureLabel::NOTE_RED))
+        }
+        _ => None,
+    }
+}
+
+#[inline]
+fn beam_info(key: bms_loader::Key) -> Option<(f64, f64, TextureLabel)> {
+    // x pos, size, color
+    use bms_loader::Key;
+    let x = key as u8;
+
+    match key {
+        Key::P1_KEY1 | Key::P1_KEY3 | Key::P1_KEY5 | Key::P1_KEY7 => {
+            Some((SCR_WIDTH + NOTES1_WIDTH * (x / 2) as f64 + NOTES2_WIDTH * ((x - 1) / 2) as f64 + OFFSET, NOTES1_WIDTH - OFFSET * 2.0, TextureLabel::WHITE_BEAM))
+        }
+        Key::P1_KEY2 | Key::P1_KEY4 | Key::P1_KEY6 => {
+            Some((SCR_WIDTH + NOTES1_WIDTH * (x / 2) as f64 + NOTES2_WIDTH * ((x - 1) / 2) as f64 + OFFSET, NOTES2_WIDTH - OFFSET * 2.0, TextureLabel::BLUE_BEAM))
+        }
+        Key::P1_SCRATCH => {
+            Some((OFFSET, SCR_WIDTH - OFFSET * 2.0, TextureLabel::RED_BEAM))
         }
         _ => None,
     }
@@ -149,6 +170,20 @@ impl BmsPlayer {
         }
         events.sort_by(|a, b| a.timing.partial_cmp(&b.timing).unwrap());
 
+        let mut key_mapping = HashMap::new();
+        key_mapping.insert(Key::A, bms_loader::Key::P1_SCRATCH);
+        key_mapping.insert(Key::Z, bms_loader::Key::P1_KEY1);
+        key_mapping.insert(Key::J, bms_loader::Key::P1_KEY1);
+        key_mapping.insert(Key::S, bms_loader::Key::P1_KEY2);
+        key_mapping.insert(Key::X, bms_loader::Key::P1_KEY3);
+        key_mapping.insert(Key::K, bms_loader::Key::P1_KEY3);
+        key_mapping.insert(Key::D, bms_loader::Key::P1_KEY4);
+        key_mapping.insert(Key::C, bms_loader::Key::P1_KEY5);
+        key_mapping.insert(Key::L, bms_loader::Key::P1_KEY5);
+        key_mapping.insert(Key::F, bms_loader::Key::P1_KEY6);
+        key_mapping.insert(Key::V, bms_loader::Key::P1_KEY7);
+        key_mapping.insert(Key::Semicolon, bms_loader::Key::P1_KEY7);
+
         println!("Finish BmsPlayer Initialization at {}", time::precise_time_s());
         BmsPlayer {
             speed: speed,
@@ -163,7 +198,8 @@ impl BmsPlayer {
             y_offset: 0f64,
             bpms: bms.bpms,
             init_time: None,
-            textures_map: textures_map
+            textures_map: textures_map,
+            key_mapping: key_mapping,
         }
     }
 
@@ -235,6 +271,8 @@ impl BmsPlayer {
             }
         };
 
+        let pushed_key_set = &self.pushed_key_set;
+
         gl.draw(args.viewport(), |c, gl| {
             // back ground
             let image = Image::new().rect(rectangle::rectangle_by_corners(0.0, 0.0, width, height));
@@ -243,6 +281,13 @@ impl BmsPlayer {
             // lanes
             let image = Image::new().rect(rectangle::rectangle_by_corners(0.0, 0.0, SCR_WIDTH + NOTES1_WIDTH * 4.0 + NOTES2_WIDTH * 3.0, height));
             image.draw(&textures_map[&TextureLabel::LANE_BG], &DrawState::new_alpha(), c.transform, gl);
+
+            for pushed_key in pushed_key_set {
+                if let Some((x, beam_width, texture_label)) = beam_info(*pushed_key) {
+                    let image = Image::new().rect(rectangle::rectangle_by_corners(0.0, 0.0, beam_width, height - 14f64));
+                    image.draw(&textures_map[&texture_label], &DrawState::new_alpha(), c.transform.trans(x, 0f64), gl)
+                }
+            }
 
             // drawable objects
             for draw in &drawings {
@@ -266,14 +311,6 @@ impl BmsPlayer {
 
     fn on_key_down(&mut self, key: &Key) {
         let down = match *key {
-            Key::A => Some(bms_loader::Key::P1_SCRATCH),
-            Key::Z => Some(bms_loader::Key::P1_KEY1),
-            Key::S => Some(bms_loader::Key::P1_KEY2),
-            Key::X => Some(bms_loader::Key::P1_KEY3),
-            Key::D => Some(bms_loader::Key::P1_KEY4),
-            Key::C => Some(bms_loader::Key::P1_KEY5),
-            Key::F => Some(bms_loader::Key::P1_KEY6),
-            Key::V => Some(bms_loader::Key::P1_KEY7),
             Key::Up => {
                 self.speed += 0.1;
                 None
@@ -285,7 +322,9 @@ impl BmsPlayer {
             Key::Space => {
                 None
             }
-            _ => None,
+            _ => {
+                self.key_mapping.get(key).map(|op| *op)
+            }
         };
 
         // judge
@@ -349,21 +388,15 @@ impl BmsPlayer {
 
     fn on_key_up(&mut self, key: &Key) {
         let up = match *key {
-            Key::A => Some(bms_loader::Key::P1_SCRATCH),
-            Key::Z => Some(bms_loader::Key::P1_KEY1),
-            Key::S => Some(bms_loader::Key::P1_KEY2),
-            Key::X => Some(bms_loader::Key::P1_KEY3),
-            Key::D => Some(bms_loader::Key::P1_KEY4),
-            Key::C => Some(bms_loader::Key::P1_KEY5),
-            Key::F => Some(bms_loader::Key::P1_KEY6),
-            Key::V => Some(bms_loader::Key::P1_KEY7),
             Key::Up => {
                 None
             }
             Key::Down => {
                 None
             }
-            _ => None,
+            _ => {
+                self.key_mapping.get(key)
+            }
         };
 
         if let Some(key) = up {
@@ -414,6 +447,9 @@ pub enum TextureLabel {
     JUDGE_GOOD,
     JUDGE_BAD,
     JUDGE_POOR,
+    RED_BEAM,
+    WHITE_BEAM,
+    BLUE_BEAM,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Copy, Clone)]

@@ -87,6 +87,9 @@ fn main() {
         textures.insert(TextureLabel::JUDGE_GOOD, Texture::from_path(Path::new("resource/judge_good.png")).unwrap());
         textures.insert(TextureLabel::JUDGE_BAD, Texture::from_path(Path::new("resource/judge_bad.png")).unwrap());
         textures.insert(TextureLabel::JUDGE_POOR, Texture::from_path(Path::new("resource/judge_poor.png")).unwrap());
+        textures.insert(TextureLabel::RED_BEAM, Texture::from_path(Path::new("resource/redbeam.png")).unwrap());
+        textures.insert(TextureLabel::WHITE_BEAM, Texture::from_path(Path::new("resource/whitebeam.png")).unwrap());
+        textures.insert(TextureLabel::BLUE_BEAM, Texture::from_path(Path::new("resource/bluebeam.png")).unwrap());
 
         let mut bms_player = bms_player::BmsPlayer::new(
             textures,
