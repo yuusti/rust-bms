@@ -110,15 +110,15 @@ fn calc_position(t: Time, bpms: &Vec<bms_loader::BpmChange>) -> f64 {
 }
 
 pub fn f64_eq(a: f64, b: f64) -> bool {
-    f64::abs(a-b) < 1e-9
+    f64::abs(a - b) < 1e-9
 }
 
 #[test]
-pub fn test_calc_position () {
+pub fn test_calc_position() {
     let bpms = vec![
-        bms_loader::BpmChange{timing: 0f64,bpm: 100f64},
-        bms_loader::BpmChange{timing: 10f64,bpm: 200f64},
-        bms_loader::BpmChange{timing: 20f64,bpm: 400f64},
+        bms_loader::BpmChange { timing: 0f64, bpm: 100f64 },
+        bms_loader::BpmChange { timing: 10f64, bpm: 200f64 },
+        bms_loader::BpmChange { timing: 20f64, bpm: 400f64 },
     ];
 
     assert!(f64_eq(0f64, calc_position(0f64, &bpms)));
@@ -147,7 +147,7 @@ impl BmsPlayer {
         for sound in bms.sounds {
             if bms_loader::Key::visible_keys().contains(&sound.key) {
                 if let Some((x, width, texture_label)) = note_info(sound.key) {
-                    objects_by_key.get_mut(&sound.key).unwrap().push(Draw { timing: sound.timing, x: x, y: calc_position(sound.timing, &bms.bpms) , width: width, height: NOTES_HEIGHT, texture_label: texture_label, wav_id: Some(sound.wav_id) });
+                    objects_by_key.get_mut(&sound.key).unwrap().push(Draw { timing: sound.timing, x: x, y: calc_position(sound.timing, &bms.bpms), width: width, height: NOTES_HEIGHT, texture_label: texture_label, wav_id: Some(sound.wav_id) });
                 }
             } else if sound.key == bms_loader::Key::BACK_CHORUS {
                 events.push(Event { timing: sound.timing, event_type: EventType::PlaySound(sound) });
@@ -203,7 +203,7 @@ impl BmsPlayer {
         }
     }
 
-    pub fn run(&mut self, window: &mut Window, gl :&mut GlGraphics) {
+    pub fn run(&mut self, window: &mut Window, gl: &mut GlGraphics) {
         let mut events = Events::new(EventSettings::new());
 
         music::set_volume(music::MAX_VOLUME);
@@ -228,7 +228,7 @@ impl BmsPlayer {
         }
     }
 
-    fn render(&mut self, args: &RenderArgs, gl :&mut GlGraphics) {
+    fn render(&mut self, args: &RenderArgs, gl: &mut GlGraphics) {
         let pt = self.get_precise_time();
         self.y_offset = calc_position(pt, &self.bpms);
 
@@ -260,7 +260,7 @@ impl BmsPlayer {
             *self.obj_index_by_key.get_mut(key).unwrap() = next_start;
         }
 
-        let judge_texture = if self.judge_display.show_until <= 0.0 { None } else {
+        let judge_texture = if pt <= self.judge_display.show_until {
             match self.judge_display.judge {
                 Some(Judge::PGREAT) => Some(TextureLabel::JUDGE_PERFECT),
                 Some(Judge::GREAT) => Some(TextureLabel::JUDGE_GREAT),
@@ -269,7 +269,7 @@ impl BmsPlayer {
                 Some(Judge::POOR) => Some(TextureLabel::JUDGE_POOR),
                 _ => None,
             }
-        };
+        } else { None };
 
         let pushed_key_set = &self.pushed_key_set;
 
@@ -282,6 +282,7 @@ impl BmsPlayer {
             let image = Image::new().rect(rectangle::rectangle_by_corners(0.0, 0.0, SCR_WIDTH + NOTES1_WIDTH * 4.0 + NOTES2_WIDTH * 3.0, height));
             image.draw(&textures_map[&TextureLabel::LANE_BG], &DrawState::new_alpha(), c.transform, gl);
 
+            // beams
             for pushed_key in pushed_key_set {
                 if let Some((x, beam_width, texture_label)) = beam_info(*pushed_key) {
                     let image = Image::new().rect(rectangle::rectangle_by_corners(0.0, 0.0, beam_width, height - 14f64));
@@ -289,7 +290,7 @@ impl BmsPlayer {
                 }
             }
 
-            // drawable objects
+            // notes and bars
             for draw in &drawings {
                 let image = Image::new().rect(rectangle::rectangle_by_corners(0.0, 0.0, draw.width, draw.height));
                 image.draw(&textures_map[&draw.texture_label], &DrawState::new_alpha(), c.transform.trans(draw.x, draw.y - draw.height / 2.0), gl);
@@ -297,8 +298,8 @@ impl BmsPlayer {
 
             // judge
             if let Some(texture_label) = judge_texture {
-                let image = Image::new().rect(rectangle::rectangle_by_corners(0.0, 0.0, width / 3.0, height / 3.0));
-                image.draw(&textures_map[&texture_label], &DrawState::new_alpha(), c.transform.trans(width - width / 3.0, height / 2.0), gl);
+                let image = Image::new().rect(rectangle::rectangle_by_corners(0.0, 0.0, NOTES1_WIDTH * 3.0 + NOTES2_WIDTH * 2.0, NOTES1_WIDTH * 3.0));
+                image.draw(&textures_map[&texture_label], &DrawState::new_alpha(), c.transform.trans(SCR_WIDTH, height / 2.0), gl);
             }
         });
     }
@@ -376,14 +377,13 @@ impl BmsPlayer {
                     }
                     EventType::PlaySound(ref snd) => {
                         music::play_sound(&snd.wav_id, music::Repeat::Times(0));
-//                        println!("sound: expected = {}, actual = {}", event.timing, pt);
+                        //                        println!("sound: expected = {}, actual = {}", event.timing, pt);
                     }
                 }
             } else {
                 break;
             }
         }
-
     }
 
     fn on_key_up(&mut self, key: &Key) {
@@ -424,7 +424,6 @@ struct Draw {
     pub height: f64,
     pub texture_label: TextureLabel,
     pub wav_id: Option<bms_loader::SoundX>
-
 }
 
 struct DrawInfo {
@@ -497,7 +496,7 @@ struct JudgeDisplay {
 
 impl JudgeDisplay {
     pub fn new() -> JudgeDisplay {
-        JudgeDisplay{judge: None, show_until: 0.0, count: HashMap::new(), combo: 0u32 }
+        JudgeDisplay { judge: None, show_until: 0.0, count: HashMap::new(), combo: 0u32 }
     }
 
     pub fn update_judge(&mut self, judge: Judge, t: Time) {
