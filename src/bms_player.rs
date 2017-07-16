@@ -14,6 +14,7 @@ use bms_loader::{self, Bms, Sound};
 use std::collections::{HashSet, HashMap};
 use ears;
 use ears::{AudioController};
+use std::cmp;
 
 type Time = f64;
 
@@ -243,6 +244,9 @@ impl BmsPlayer {
         let mut drawings = vec![];
         for (key, objects) in &self.objects_by_key {
             let start = *self.obj_index_by_key.get(key).unwrap();
+            let judge_consumed = *self.judge_index_by_key.get(key).unwrap_or(&0usize);
+            let start = cmp::max(start, judge_consumed);
+
             let mut next_start = start;
             for draw in &objects[start..objects.len()] {
                 let y = (draw.y - self.y_offset) * self.speed;
