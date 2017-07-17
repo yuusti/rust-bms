@@ -33,6 +33,7 @@ pub struct BmsPlayer {
     init_time: Option<f64>,
     textures_map: HashMap<TextureLabel, Texture>,
     key_mapping: HashMap<Key, bms_loader::Key>,
+    judgerank: JudgeRank,
 }
 
 #[inline]
@@ -201,6 +202,7 @@ impl BmsPlayer {
             init_time: None,
             textures_map: textures_map,
             key_mapping: key_mapping,
+            judgerank: IIDX_JUDGERANK,
         }
     }
 
@@ -343,7 +345,7 @@ impl BmsPlayer {
                         let timing = draw.timing;
                         if pt <= timing + 0.1 {
                             let time_diff = timing - pt;
-                            if let Some(judge) = Judge::get_judge(f64::abs(time_diff)) {
+                            if let Some(judge) = self.judgerank.get_judge(f64::abs(time_diff)) {
                                 self.judge_display.update_judge(judge, pt);
                                 *index += 1;
                             }
@@ -465,15 +467,32 @@ enum Judge {
 }
 
 impl Judge {
-    fn get_judge(d: Time) -> Option<Judge> {
-        if d < 0.1 {
-            Some(if d < 0.02 {
+    fn combo_lasts(judge: Judge) -> bool {
+        match judge {
+            Judge::PGREAT | Judge::GREAT | Judge::GOOD => true,
+            _ => false
+        }
+    }
+}
+
+struct JudgeRank {
+    pgreat: f64,
+    great: f64,
+    good: f64,
+    bad: f64,
+    poor: f64,
+}
+
+impl JudgeRank {
+    fn get_judge(&self, d: Time) -> Option<Judge> {
+        if d < self.poor {
+            Some(if d < self.pgreat {
                 Judge::PGREAT
-            } else if d < 0.03 {
+            } else if d < self.great {
                 Judge::GREAT
-            } else if d < 0.05 {
+            } else if d < self.good {
                 Judge::GOOD
-            } else if d < 0.08 {
+            } else if d < self.bad {
                 Judge::BAD
             } else {
                 Judge::POOR
@@ -482,14 +501,9 @@ impl Judge {
             None
         }
     }
-
-    fn combo_lasts(judge: Judge) -> bool {
-        match judge {
-            Judge::PGREAT | Judge::GREAT | Judge::GOOD => true,
-            _ => false
-        }
-    }
 }
+
+const IIDX_JUDGERANK: JudgeRank = JudgeRank { pgreat: 0.02, great: 0.04, good: 0.105, bad: 0.15, poor: 0.2 };
 
 struct JudgeDisplay {
     judge: Option<Judge>,
