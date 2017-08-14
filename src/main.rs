@@ -8,13 +8,15 @@ extern crate regex;
 extern crate music;
 extern crate sdl2;
 extern crate time;
+extern crate image;
+extern crate ffmpeg;
 
 use piston::event_loop::*;
 use piston::input::*;
 use graphics::*;
 use piston::window::WindowSettings;
 use glutin_window::GlutinWindow as Window;
-use opengl_graphics::{GlGraphics, OpenGL, Texture};
+use opengl_graphics::{GlGraphics, OpenGL, Texture, TextureSettings};
 use std::path::Path;
 
 use ears::{Sound, AudioController};
@@ -55,6 +57,8 @@ fn main() {
         let mut events = Events::new(EventSettings::new());
         let mut gl = GlGraphics::new(opengl);
 
+        println!("Start loading at {}", time::precise_time_s());
+
         let loading = Texture::from_path(Path::new("resource/loading.png")).unwrap();
         const BG_COLOR: [f32; 4] = [0.3, 0.3, 0.3, 1.0];
         let mut cnt = 0;
@@ -64,12 +68,11 @@ fn main() {
                     clear(BG_COLOR, gl);
                     let w = r.width as f64;
                     let h = r.height as f64;
-                    let image = Image::new().rect(rectangle::rectangle_by_corners(0.0, 0.0, w/2.0, h/2.0));
-                    image.draw(&loading, &DrawState::new_alpha(), c.transform.trans(w/4.0, h/4.0), gl);
+                    let image = Image::new().rect(rectangle::rectangle_by_corners(0.0, 0.0, w / 2.0, h / 2.0));
+                    image.draw(&loading, &DrawState::new_alpha(), c.transform.trans(w / 4.0, h / 4.0), gl);
                 });
                 cnt += 1;
-                // TODO: Improve this ridiculous condition
-                if cnt > 100 {
+                if cnt > 1 {
                     break;
                 }
             }

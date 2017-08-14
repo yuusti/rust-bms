@@ -17,3 +17,5 @@ ears = "0.4.0"
 rand = "*"
 regex = "0.2.2"
 time = "*"
+image = "*"
+ffmpeg = {git = "https://github.com/meh/rust-ffmpeg", rev = "8aabd018f537934d4520d6dad97d29d6f41baa54"}

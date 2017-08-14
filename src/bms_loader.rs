@@ -1,9 +1,16 @@
 extern crate music;
+
+use std::{fmt, clone};
 use rand::{self, Rng};
 use bms_parser::{BmsParser, BmsFileParser, BmsScript};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use time;
+
+use opengl_graphics::{GlGraphics, OpenGL, Texture, TextureSettings};
+use image::ImageBuffer;
+
+use ffmpeg::{self, format, codec, frame, media, filter, rescale, Rescale};
 
 pub struct KeyMetadata {
     id: u32,
@@ -74,10 +81,18 @@ pub struct BpmChange {
     pub bpm: f64,
 }
 
+#[derive(Debug, Copy, Clone)]
+pub struct Image {
+    pub timing: f64,
+    pub texture_id: i32,
+}
+
 pub struct Bms {
     pub sounds: Vec<Sound>,
     pub bars: Vec<f64>,  // time for bar line to pass the judge line relative to start time in sec.
     pub bpms: Vec<BpmChange>,
+    pub bga: Vec<Image>,
+    pub textures: Vec<Texture>,
 }
 
 pub trait BmsLoader {
@@ -101,6 +116,7 @@ enum BmsEventType {
     Bar,
     BpmChange(f64),
     Key(Key, SoundX),
+    Bga(Vec<Image>),
 }
 
 pub struct BmsFileLoader {
@@ -143,6 +159,51 @@ impl BmsFileLoader {
 
         command_v
     }
+
+    fn load_images(path: &str, textures: &mut Vec<Texture>) -> Vec<Image> {
+        ffmpeg::init().unwrap();
+        let mut images = Vec::new();
+        let mut id = textures.len() as i32;
+        match ffmpeg::format::input(&path.to_string()) {
+            Ok(mut context) => {
+                let (mut decoder, image_index) = {
+                    let input = context.streams().best(media::Type::Video).unwrap();
+                    (input.codec().decoder().video().unwrap(), input.index())
+                };
+
+                let mut decoded = frame::Video::empty();
+                let mut converted = frame::Video::empty();
+                let mut i = 0;
+                for (stream, mut packet) in context.packets() {
+                    if stream.index() == image_index {
+                        if let Ok(true) = decoder.decode(&packet, &mut decoded) {
+                            let mut ctx = ffmpeg::software::scaling::Context::get(
+                                decoded.format(),
+                                decoded.width(),
+                                decoded.height(),
+                                format::Pixel::RGBA,
+                                decoded.width(),
+                                decoded.height(),
+                                ffmpeg::software::scaling::flag::BICUBIC).unwrap();
+
+                            let time = decoded.timestamp().unwrap_or(0) as f64 * f64::from(stream.time_base());
+//                            println!("{}", time);
+                            images.push(Image { timing: time, texture_id: id });
+
+                            ctx.run(&mut decoded, &mut converted);
+                            let texture = Texture::from_image(&ImageBuffer::from_raw(converted.width(), converted.height(), converted.data(0).to_vec()).unwrap(), &TextureSettings::new());
+                            textures.push(texture);
+                            id += 1;
+                        }
+                    }
+                }
+            }
+            Err(error) => {
+                println!("error while loading bga: {}", error)
+            }
+        }
+        images
+    }
 }
 
 impl BmsLoader for BmsFileLoader {
@@ -157,6 +218,8 @@ impl BmsLoader for BmsFileLoader {
         let mut bpms: Vec<BpmChange> = vec![];
         let mut bars: Vec<f64> = vec![];
         let mut sounds: Vec<Sound> = vec![];
+        let mut bga: Vec<Image> = vec![];
+        let mut textures: Vec<Texture> = vec![];
 
         // get initial bpm
         let initial_bpm: f64 = script.headers().get("BPM").unwrap().parse().unwrap_or(130.);
@@ -178,12 +241,18 @@ impl BmsLoader for BmsFileLoader {
 
         let path_path = Path::new(&self.path);
         let mut wav_ids: HashSet<u32> = HashSet::new();
+        let mut image_map: HashMap<u32, Vec<Image>> = HashMap::new();
         for (key, value) in script.headers() {
             if key.starts_with("WAV") {
                 let wav_id = u32::from_str_radix(&key[3..5], 36).unwrap();
 //                println!("{} {}", &value, path_path.with_file_name(&value).with_extension("ogg").as_path().to_str().unwrap());
                 music::bind_sound_file(SoundX {id: wav_id}, path_path.with_file_name(&value).with_extension("ogg").as_path().to_str().unwrap());
                 wav_ids.insert(wav_id);
+            }
+
+            if key.starts_with("BMP") {
+                let bmp_id = u32::from_str_radix(&key[3..5], 36).unwrap();
+                image_map.insert(bmp_id, BmsFileLoader::load_images(path_path.with_file_name(&value).to_str().unwrap(), &mut textures));
             }
         }
 
@@ -236,6 +305,22 @@ impl BmsLoader for BmsFileLoader {
                 };
             };
 
+            let bga_channel = format!("{}04", segment_id);
+            for bga_channel_commands in script.channels().get(&bga_channel).unwrap_or(&empty) {
+                let commands = BmsFileLoader::decompose_command(bga_channel_commands);
+                let notes = commands.len();
+
+                for (idx, command) in commands.iter().enumerate() {
+                    let bmp_id = u32::from_str_radix(command, 36).unwrap();
+                    let segment_position = (idx as f64) / (notes as f64);
+
+                    if image_map.contains_key(&bmp_id) {
+                        events.push(BmsEvent::new(segment_position, BmsEventType::Bga(image_map[&bmp_id].clone())));
+                    };
+                };
+            }
+
+
             events.sort_by(|a, b| a.segment_position.partial_cmp(&b.segment_position).unwrap());
             let mut previous_position: f64 = 0.;
             let mut previous_timing: f64 = segment_head;
@@ -254,6 +339,11 @@ impl BmsLoader for BmsFileLoader {
                         current_segment_bpm = newBpm;
                         bpms.push(BpmChange { timing: timing, bpm: newBpm} );
                     },
+                    BmsEventType::Bga(images) => {
+                        for image in images {
+                            bga.push(Image {timing: timing + image.timing, texture_id: image.texture_id});
+                        }
+                    }
                 };
 
                 previous_position = event.segment_position;
@@ -267,7 +357,7 @@ impl BmsLoader for BmsFileLoader {
         println!("notes: {}", sounds.len());
         println!("Finish BmsFileLoader.load() at {}", time::precise_time_s());
 
-        Bms { bpms: bpms, bars: bars, sounds: sounds }
+        Bms { bpms: bpms, bars: bars, sounds: sounds, bga: bga, textures: textures }
     }
 }
 
@@ -306,7 +396,9 @@ impl BmsLoader for FixtureLoader {
         Bms {
             sounds: v,
             bars: (0..1000i64).map(|x| x as f64).collect(),
-            bpms: (0..100000i64).map(|x| BpmChange { timing: x as f64 / 100.0, bpm: 201.0 + 200.0 * ((x as f64 / 100.0 % (f64::consts::PI * 2.0)).sin()) }).collect()
+            bpms: (0..100000i64).map(|x| BpmChange { timing: x as f64 / 100.0, bpm: 201.0 + 200.0 * ((x as f64 / 100.0 % (f64::consts::PI * 2.0)).sin()) }).collect(),
+            bga: Vec::new(),
+            textures: Vec::new(),
         }
     }
 }

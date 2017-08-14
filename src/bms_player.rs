@@ -32,6 +32,8 @@ pub struct BmsPlayer {
     init_time: Option<f64>,
     textures_map: HashMap<TextureLabel, Texture>,
     key_mapping: HashMap<Key, bms_loader::Key>,
+    bga_textures: Vec<Texture>,
+    bga_id: Option<i32>,
 }
 
 #[inline]
@@ -80,6 +82,7 @@ const NOTES2_WIDTH: f64 = 50f64;
 const NOTES_HEIGHT: f64 = 10.0;
 const BAR_HEIGHT: f64 = 1.0;
 const OFFSET: f64 = 2.5;
+const LANE_WIDTH: f64 = SCR_WIDTH + NOTES1_WIDTH * 4.0 + NOTES2_WIDTH * 3.0;
 
 fn calc_position(t: Time, bpms: &Vec<bms_loader::BpmChange>) -> f64 {
     let mut y = 0f64;
@@ -154,6 +157,10 @@ impl BmsPlayer {
             }
         }
 
+        for image in bms.bga {
+            events.push(Event {timing: image.timing, event_type: EventType::ChangeBga(image.texture_id)});
+        }
+
         objects_by_key.insert(bms_loader::Key::BACK_CHORUS, vec![]);
         for bar in bms.bars.iter() {
             objects_by_key.get_mut(&bms_loader::Key::BACK_CHORUS).unwrap().push(Draw { timing: *bar, x: 0.0, y: calc_position(*bar, &bms.bpms), width: 1000.0, height: BAR_HEIGHT, texture_label: TextureLabel::BACKGROUND, wav_id: None });
@@ -200,6 +207,8 @@ impl BmsPlayer {
             init_time: None,
             textures_map: textures_map,
             key_mapping: key_mapping,
+            bga_textures: bms.textures,
+            bga_id: None
         }
     }
 
@@ -272,6 +281,8 @@ impl BmsPlayer {
         } else { None };
 
         let pushed_key_set = &self.pushed_key_set;
+        let bga_map = &self.bga_textures;
+        let bga = self.bga_id;
 
         gl.draw(args.viewport(), |c, gl| {
             // back ground
@@ -279,7 +290,7 @@ impl BmsPlayer {
             image.draw(&textures_map[&TextureLabel::BACKGROUND], &DrawState::new_alpha(), c.transform, gl);
 
             // lanes
-            let image = Image::new().rect(rectangle::rectangle_by_corners(0.0, 0.0, SCR_WIDTH + NOTES1_WIDTH * 4.0 + NOTES2_WIDTH * 3.0, height));
+            let image = Image::new().rect(rectangle::rectangle_by_corners(0.0, 0.0, LANE_WIDTH, height));
             image.draw(&textures_map[&TextureLabel::LANE_BG], &DrawState::new_alpha(), c.transform, gl);
 
             // beams
@@ -295,6 +306,13 @@ impl BmsPlayer {
                 let image = Image::new().rect(rectangle::rectangle_by_corners(0.0, 0.0, draw.width, draw.height));
                 image.draw(&textures_map[&draw.texture_label], &DrawState::new_alpha(), c.transform.trans(draw.x, draw.y - draw.height / 2.0), gl);
             }
+
+            // bga
+            bga.map(|id| {
+                let size = if width - LANE_WIDTH < height { width - LANE_WIDTH } else { height };
+                let image = Image::new().rect(rectangle::rectangle_by_corners(0.0, 0.0, size, size));
+                image.draw(&bga_map[id as usize], &DrawState::new_alpha(), c.transform.trans(LANE_WIDTH, 0f64), gl)
+            });
 
             // judge
             if let Some(texture_label) = judge_texture {
@@ -379,6 +397,9 @@ impl BmsPlayer {
                         music::play_sound(&snd.wav_id, music::Repeat::Times(0));
                         //                        println!("sound: expected = {}, actual = {}", event.timing, pt);
                     }
+                    EventType::ChangeBga(ref id) => {
+                        self.bga_id = Some(*id);
+                    }
                 }
             } else {
                 break;
@@ -412,7 +433,8 @@ struct Event {
 
 enum EventType {
     ChangeBpm(f64),
-    PlaySound(bms_loader::Sound)
+    PlaySound(bms_loader::Sound),
+    ChangeBga(i32)
 }
 
 #[derive(Clone)]
