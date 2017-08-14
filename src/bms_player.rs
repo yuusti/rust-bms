@@ -14,6 +14,7 @@ use bms_loader::{self, Bms, Sound};
 use std::collections::{HashSet, HashMap};
 use ears;
 use ears::{AudioController};
+use std::cmp;
 
 type Time = f64;
 
@@ -34,6 +35,7 @@ pub struct BmsPlayer {
     key_mapping: HashMap<Key, bms_loader::Key>,
     bga_textures: Vec<Texture>,
     bga_id: Option<i32>,
+    judgerank: JudgeRank,
 }
 
 #[inline]
@@ -208,7 +210,8 @@ impl BmsPlayer {
             textures_map: textures_map,
             key_mapping: key_mapping,
             bga_textures: bms.textures,
-            bga_id: None
+            bga_id: None,
+            judgerank: IIDX_JUDGERANK,
         }
     }
 
@@ -252,6 +255,9 @@ impl BmsPlayer {
         let mut drawings = vec![];
         for (key, objects) in &self.objects_by_key {
             let start = *self.obj_index_by_key.get(key).unwrap();
+            let judge_consumed = *self.judge_index_by_key.get(key).unwrap_or(&0usize);
+            let start = cmp::max(start, judge_consumed);
+
             let mut next_start = start;
             for draw in &objects[start..objects.len()] {
                 let y = (draw.y - self.y_offset) * self.speed;
@@ -357,7 +363,7 @@ impl BmsPlayer {
                         let timing = draw.timing;
                         if pt <= timing + 0.1 {
                             let time_diff = timing - pt;
-                            if let Some(judge) = Judge::get_judge(f64::abs(time_diff)) {
+                            if let Some(judge) = self.judgerank.get_judge(f64::abs(time_diff)) {
                                 self.judge_display.update_judge(judge, pt);
                                 *index += 1;
                             }
@@ -483,15 +489,32 @@ enum Judge {
 }
 
 impl Judge {
-    fn get_judge(d: Time) -> Option<Judge> {
-        if d < 0.1 {
-            Some(if d < 0.02 {
+    fn combo_lasts(judge: Judge) -> bool {
+        match judge {
+            Judge::PGREAT | Judge::GREAT | Judge::GOOD => true,
+            _ => false
+        }
+    }
+}
+
+struct JudgeRank {
+    pgreat: f64,
+    great: f64,
+    good: f64,
+    bad: f64,
+    poor: f64,
+}
+
+impl JudgeRank {
+    fn get_judge(&self, d: Time) -> Option<Judge> {
+        if d < self.poor {
+            Some(if d < self.pgreat {
                 Judge::PGREAT
-            } else if d < 0.03 {
+            } else if d < self.great {
                 Judge::GREAT
-            } else if d < 0.05 {
+            } else if d < self.good {
                 Judge::GOOD
-            } else if d < 0.08 {
+            } else if d < self.bad {
                 Judge::BAD
             } else {
                 Judge::POOR
@@ -500,14 +523,9 @@ impl Judge {
             None
         }
     }
-
-    fn combo_lasts(judge: Judge) -> bool {
-        match judge {
-            Judge::PGREAT | Judge::GREAT | Judge::GOOD => true,
-            _ => false
-        }
-    }
 }
+
+const IIDX_JUDGERANK: JudgeRank = JudgeRank { pgreat: 0.02, great: 0.04, good: 0.105, bad: 0.15, poor: 0.2 };
 
 struct JudgeDisplay {
     judge: Option<Judge>,
