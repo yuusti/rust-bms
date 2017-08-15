@@ -94,7 +94,7 @@ impl BmsParser for BmsStringParser {
 
 #[test]
 fn parser_test() {
-    let bms = BmsFileParser { path: "example/conflict/_01_conflict.bme".to_string() }.parse();
+    let bms = BmsFileParser { path: "bms/conflict/_01_conflict.bme".to_string() }.parse();
     println!("{}", bms.headers().get("GENRE").unwrap());
     println!("{}", bms.channel("091", "06"))
 }

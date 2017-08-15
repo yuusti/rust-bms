@@ -33,36 +33,56 @@ mod bms_parser;
 mod bms_player;
 mod bms_loader;
 
+use bms_player::TextureLabel;
+
 fn main() {
     println!("Start main() at {}", time::precise_time_s());
     let opengl = OpenGL::V3_2;
+    let mut window: Window = WindowSettings::new(
+        "rust bms",
+        [800, 600]
+    )
+        .opengl(opengl)
+        .exit_on_esc(true)
+        .build()
+        .unwrap();
+    let mut gl = GlGraphics::new(opengl);
+
+    let mut textures = HashMap::new();
+    textures.insert(TextureLabel::BACKGROUND, Texture::from_path(Path::new("resource/background.png")).unwrap());
+    textures.insert(TextureLabel::LANE_BG, Texture::from_path(Path::new("resource/lane_bg.png")).unwrap());
+    textures.insert(TextureLabel::NOTE_BLUE, Texture::from_path(Path::new("resource/note_blue.png")).unwrap());
+    textures.insert(TextureLabel::NOTE_RED, Texture::from_path(Path::new("resource/note_red.png")).unwrap());
+    textures.insert(TextureLabel::NOTE_WHITE, Texture::from_path(Path::new("resource/note_white.png")).unwrap());
+    textures.insert(TextureLabel::JUDGE_PERFECT, Texture::from_path(Path::new("resource/judge_perfect.png")).unwrap());
+    textures.insert(TextureLabel::JUDGE_GREAT, Texture::from_path(Path::new("resource/judge_great.png")).unwrap());
+    textures.insert(TextureLabel::JUDGE_GOOD, Texture::from_path(Path::new("resource/judge_good.png")).unwrap());
+    textures.insert(TextureLabel::JUDGE_BAD, Texture::from_path(Path::new("resource/judge_bad.png")).unwrap());
+    textures.insert(TextureLabel::JUDGE_POOR, Texture::from_path(Path::new("resource/judge_poor.png")).unwrap());
+    textures.insert(TextureLabel::RED_BEAM, Texture::from_path(Path::new("resource/redbeam.png")).unwrap());
+    textures.insert(TextureLabel::WHITE_BEAM, Texture::from_path(Path::new("resource/whitebeam.png")).unwrap());
+    textures.insert(TextureLabel::BLUE_BEAM, Texture::from_path(Path::new("resource/bluebeam.png")).unwrap());
 
     let script_path = env::args().nth(1).expect("pass script path to first argument");
+    println!("{}", script_path);
+    play_bms(&mut window, &mut gl, textures, script_path);
+}
+
+fn play_bms(mut window: &mut Window, mut gl: &mut GlGraphics, textures_map: HashMap<TextureLabel, Texture>, script_path: String) {
     let loader = bms_loader::BmsFileLoader::new(&script_path);
 
     use bms_loader::BmsLoader;
-
     music::start::<bms_loader::MusicX, bms_loader::SoundX, _>(|| {
         mixer::allocate_channels(256);
 
-        let mut window: Window = WindowSettings::new(
-            "rust bms",
-            [800, 600]
-        )
-            .opengl(opengl)
-            .exit_on_esc(true)
-            .build()
-            .unwrap();
-
         let mut events = Events::new(EventSettings::new());
-        let mut gl = GlGraphics::new(opengl);
 
         println!("Start loading at {}", time::precise_time_s());
 
         let loading = Texture::from_path(Path::new("resource/loading.png")).unwrap();
         const BG_COLOR: [f32; 4] = [0.3, 0.3, 0.3, 1.0];
         let mut cnt = 0;
-        while let Some(e) = events.next(&mut window) {
+        while let Some(e) = events.next(window) {
             if let Some(r) = e.render_args() {
                 gl.draw(r.viewport(), |c, gl| {
                     clear(BG_COLOR, gl);
@@ -78,24 +98,9 @@ fn main() {
             }
         }
 
-        let mut textures = HashMap::new();
-        use bms_player::TextureLabel;
-        textures.insert(TextureLabel::BACKGROUND, Texture::from_path(Path::new("resource/background.png")).unwrap());
-        textures.insert(TextureLabel::LANE_BG, Texture::from_path(Path::new("resource/lane_bg.png")).unwrap());
-        textures.insert(TextureLabel::NOTE_BLUE, Texture::from_path(Path::new("resource/note_blue.png")).unwrap());
-        textures.insert(TextureLabel::NOTE_RED, Texture::from_path(Path::new("resource/note_red.png")).unwrap());
-        textures.insert(TextureLabel::NOTE_WHITE, Texture::from_path(Path::new("resource/note_white.png")).unwrap());
-        textures.insert(TextureLabel::JUDGE_PERFECT, Texture::from_path(Path::new("resource/judge_perfect.png")).unwrap());
-        textures.insert(TextureLabel::JUDGE_GREAT, Texture::from_path(Path::new("resource/judge_great.png")).unwrap());
-        textures.insert(TextureLabel::JUDGE_GOOD, Texture::from_path(Path::new("resource/judge_good.png")).unwrap());
-        textures.insert(TextureLabel::JUDGE_BAD, Texture::from_path(Path::new("resource/judge_bad.png")).unwrap());
-        textures.insert(TextureLabel::JUDGE_POOR, Texture::from_path(Path::new("resource/judge_poor.png")).unwrap());
-        textures.insert(TextureLabel::RED_BEAM, Texture::from_path(Path::new("resource/redbeam.png")).unwrap());
-        textures.insert(TextureLabel::WHITE_BEAM, Texture::from_path(Path::new("resource/whitebeam.png")).unwrap());
-        textures.insert(TextureLabel::BLUE_BEAM, Texture::from_path(Path::new("resource/bluebeam.png")).unwrap());
 
         let mut bms_player = bms_player::BmsPlayer::new(
-            textures,
+            textures_map,
             loader.load(),
             0.0,
             1.0
