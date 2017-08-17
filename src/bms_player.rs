@@ -36,6 +36,14 @@ pub struct BmsPlayer {
     bga_textures: Vec<Texture>,
     bga_id: Option<i32>,
     judgerank: JudgeRank,
+    state: GameState,
+
+}
+
+#[derive(Eq, PartialEq)]
+enum GameState {
+    PLAY,
+    STOP,
 }
 
 #[inline]
@@ -159,9 +167,14 @@ impl BmsPlayer {
             }
         }
 
+        let mut bga_ends: f64 = 0.0;
         for image in bms.bga {
-            events.push(Event {timing: image.timing, event_type: EventType::ChangeBga(image.texture_id)});
+            events.push(Event {timing: image.timing, event_type: EventType::ChangeBga(Some(image.texture_id))});
+            if bga_ends < image.timing {
+                bga_ends = image.timing;
+            }
         }
+        events.push(Event {timing: bga_ends + 0.5, event_type: EventType::ChangeBga(None)});
 
         objects_by_key.insert(bms_loader::Key::BACK_CHORUS, vec![]);
         for bar in bms.bars.iter() {
@@ -178,6 +191,11 @@ impl BmsPlayer {
             events.push(Event { timing: bpm.timing, event_type: EventType::ChangeBpm(bpm.bpm) });
         }
         events.sort_by(|a, b| a.timing.partial_cmp(&b.timing).unwrap());
+        let end_timing = 1.0 + match events.last() {
+            Some(event) => event.timing,
+            None => 0.0
+        };
+        events.push(Event {timing: end_timing, event_type: EventType::EndMusic });
 
         let mut key_mapping = HashMap::new();
         key_mapping.insert(Key::A, bms_loader::Key::P1_SCRATCH);
@@ -212,6 +230,7 @@ impl BmsPlayer {
             bga_textures: bms.textures,
             bga_id: None,
             judgerank: IIDX_JUDGERANK,
+            state: GameState::PLAY
         }
     }
 
@@ -237,6 +256,10 @@ impl BmsPlayer {
             }
 
             self.process_event();
+
+            if self.state == GameState::STOP {
+                break;
+            }
         }
     }
 
@@ -344,6 +367,10 @@ impl BmsPlayer {
                 self.speed -= 0.1;
                 None
             }
+            Key::Escape => {
+                self.state = GameState::STOP;
+                None
+            }
             Key::Space => {
                 None
             }
@@ -359,19 +386,22 @@ impl BmsPlayer {
                 self.pushed_key_set.insert(note_key);
 
                 while let Some(mut index) = self.judge_index_by_key.get_mut(&note_key) {
-                    if let Some(draw) = self.objects_by_key[&note_key].get(*index) {
-                        let timing = draw.timing;
-                        if pt <= timing + 0.1 {
-                            let time_diff = timing - pt;
-                            if let Some(judge) = self.judgerank.get_judge(f64::abs(time_diff)) {
-                                self.judge_display.update_judge(judge, pt);
-                                *index += 1;
+                    match self.objects_by_key[&note_key].get(*index) {
+                        Some(draw) => {
+                            let timing = draw.timing;
+                            if pt <= timing + 0.1 {
+                                let time_diff = timing - pt;
+                                if let Some(judge) = self.judgerank.get_judge(f64::abs(time_diff)) {
+                                    self.judge_display.update_judge(judge, pt);
+                                    *index += 1;
+                                }
+                                if let Some(wav_id) = draw.wav_id {
+                                    music::play_sound(&wav_id, music::Repeat::Times(0));
+                                }
+                                break;
                             }
-                            if let Some(wav_id) = draw.wav_id {
-                                music::play_sound(&wav_id, music::Repeat::Times(0));
-                            }
-                            break;
                         }
+                        None => break
                     }
                     *index += 1;
                 }
@@ -404,7 +434,10 @@ impl BmsPlayer {
                         //                        println!("sound: expected = {}, actual = {}", event.timing, pt);
                     }
                     EventType::ChangeBga(ref id) => {
-                        self.bga_id = Some(*id);
+                        self.bga_id = *id;
+                    }
+                    EventType::EndMusic => {
+                        self.state = GameState::STOP;
                     }
                 }
             } else {
@@ -440,7 +473,8 @@ struct Event {
 enum EventType {
     ChangeBpm(f64),
     PlaySound(bms_loader::Sound),
-    ChangeBga(i32)
+    ChangeBga(Option<i32>),
+    EndMusic
 }
 
 #[derive(Clone)]

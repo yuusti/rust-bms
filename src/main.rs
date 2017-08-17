@@ -43,20 +43,23 @@ use walkdir::{DirEntry, WalkDir, WalkDirIterator};
 fn main() {
     println!("Start main() at {}", time::precise_time_s());
     let opengl = OpenGL::V3_2;
-    let mut window: Window = WindowSettings::new(
-        "rust bms",
-        [800, 600]
-    )
-        .opengl(opengl)
-        .exit_on_esc(true)
-        .build()
-        .unwrap();
-    let mut gl = GlGraphics::new(opengl);
+    music::start::<bms_loader::MusicX, bms_loader::SoundX, _>(|| {
+        mixer::allocate_channels(256);
 
-    match env::args().nth(1) {
-        Some(path) => play_bms(&mut window, &mut gl, path),
-        None => music_selection(&mut window, &mut gl)
-    }
+        let mut window: Window = WindowSettings::new(
+            "rust bms",
+            [800, 600]
+        )
+            .opengl(opengl)
+            .build()
+            .unwrap();
+        let mut gl = GlGraphics::new(opengl);
+
+        match env::args().nth(1) {
+            Some(path) => play_bms(&mut window, &mut gl, path),
+            None => music_selection(&mut window, &mut gl)
+        }
+    });
 }
 
 fn music_selection(mut window: &mut Window, mut gl: &mut GlGraphics) {
@@ -126,6 +129,9 @@ fn music_selection(mut window: &mut Window, mut gl: &mut GlGraphics) {
                 Key::Return => {
                     play_bms(&mut window, &mut gl, path_title[cur].0.to_str().unwrap().to_string());
                 }
+                Key::Escape => {
+                    break;
+                }
                 _ => {
                     ()
                 }
@@ -185,17 +191,13 @@ fn play_bms(mut window: &mut Window, mut gl: &mut GlGraphics, script_path: Strin
     let loader = bms_loader::BmsFileLoader::new(&script_path);
 
     use bms_loader::BmsLoader;
-    music::start::<bms_loader::MusicX, bms_loader::SoundX, _>(|| {
-        mixer::allocate_channels(256);
+    println!("Start loading at {}", time::precise_time_s());
+    let mut bms_player = bms_player::BmsPlayer::new(
+        textures_map,
+        loader.load(),
+        0.0,
+        1.0
+    );
 
-        println!("Start loading at {}", time::precise_time_s());
-        let mut bms_player = bms_player::BmsPlayer::new(
-            textures_map,
-            loader.load(),
-            0.0,
-            1.0
-        );
-
-        bms_player.run(&mut window, &mut gl);
-    });
+    bms_player.run(&mut window, &mut gl);
 }

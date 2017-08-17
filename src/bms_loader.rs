@@ -246,7 +246,13 @@ impl BmsLoader for BmsFileLoader {
             if key.starts_with("WAV") {
                 let wav_id = u32::from_str_radix(&key[3..5], 36).unwrap();
 //                println!("{} {}", &value, path_path.with_file_name(&value).with_extension("ogg").as_path().to_str().unwrap());
-                music::bind_sound_file(SoundX {id: wav_id}, path_path.with_file_name(&value).with_extension("ogg").as_path().to_str().unwrap());
+                let wav_path = path_path.with_file_name(&value);
+                let wav_path = if wav_path.with_extension("wav").as_path().exists() {
+                    wav_path.with_extension("wav")
+                } else {
+                    wav_path.with_extension("ogg")
+                };
+                music::bind_sound_file(SoundX {id: wav_id}, wav_path.as_path().to_str().unwrap());
                 wav_ids.insert(wav_id);
             }
 
