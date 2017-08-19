@@ -300,26 +300,30 @@ impl BmsPlayer {
         }
 
         let judge_texture = if pt <= self.judge_display.show_until {
-            let mut x = self.judge_display.combo;
-            let digits = if x > 0 {
-                let mut v = Vec::new();
-                while x > 0 {
-                    v.push(x % 10);
-                    x /= 10;
-                }
-                v.reverse();
-                v
-            } else {
-                Vec::new()
-            };
-
             if let Some(judge) = self.judge_display.judge {
+                let mut x = match judge {
+                    Judge::PGREAT | Judge::GREAT | Judge::GOOD => self.judge_display.combo,
+                    _ => 0
+                };
+                let digits = if x > 0 {
+                    let mut v = Vec::new();
+                    while x > 0 {
+                        v.push(x % 10);
+                        x /= 10;
+                    }
+                    v.reverse();
+                    v
+                } else {
+                    Vec::new()
+                };
+
                 Some((match judge {
                     Judge::PGREAT => TextureLabel::JUDGE_PERFECT,
                     Judge::GREAT => TextureLabel::JUDGE_GREAT,
                     Judge::GOOD => TextureLabel::JUDGE_GOOD,
                     Judge::BAD => TextureLabel::JUDGE_BAD,
                     Judge::POOR => TextureLabel::JUDGE_POOR,
+                    Judge::MISSED => TextureLabel::JUDGE_POOR,
                 }, digits))
             } else {
                 None
@@ -422,15 +426,15 @@ impl BmsPlayer {
 
                 while let Some(mut index) = self.judge_index_by_key.get_mut(&note_key) {
                     match self.objects_by_key[&note_key].get(*index) {
-                        Some(draw) => {
-                            let timing = draw.timing;
-                            if pt <= timing + 0.1 {
+                        Some(note) => {
+                            let timing = note.timing;
+                            if pt <= timing + 2.0 {
                                 let time_diff = timing - pt;
                                 if let Some(judge) = self.judgerank.get_judge(f64::abs(time_diff)) {
                                     self.judge_display.update_judge(judge, pt);
                                     *index += 1;
                                 }
-                                if let Some(wav_id) = draw.wav_id {
+                                if let Some(wav_id) = note.wav_id {
                                     music::play_sound(&wav_id, music::Repeat::Times(0));
                                 }
                                 break;
@@ -455,6 +459,25 @@ impl BmsPlayer {
 
     pub fn process_event(&mut self) {
         let pt = self.get_precise_time();
+
+        // process missed notes
+        for note_key in bms_loader::Key::visible_keys() {
+            while let Some(mut index) = self.judge_index_by_key.get_mut(&note_key) {
+                match self.objects_by_key[&note_key].get(*index) {
+                    Some(note) => {
+                        let timing = note.timing;
+                        if pt > timing + self.judgerank.bad {
+                            self.judge_display.update_judge(Judge::MISSED, pt);
+                            *index += 1;
+                        } else {
+                            break;
+                        }
+                    }
+                    None => break
+                }
+            }
+        }
+
         // process events
         let start = self.event_index;
         for event in &self.events[start..self.events.len()] {
@@ -560,23 +583,28 @@ enum Judge {
     GOOD,
     BAD,
     POOR,
+    MISSED,
 }
 
 impl Judge {
     fn combo_lasts(judge: Judge) -> bool {
         match judge {
-            Judge::PGREAT | Judge::GREAT | Judge::GOOD => true,
+            Judge::PGREAT | Judge::GREAT | Judge::GOOD | Judge::POOR => true,
             _ => false
         }
+    }
+
+    fn consume_note(&self) -> bool {
+        *self != Judge::POOR
     }
 }
 
 struct JudgeRank {
-    pgreat: f64,
-    great: f64,
-    good: f64,
-    bad: f64,
-    poor: f64,
+    pub pgreat: f64,
+    pub great: f64,
+    pub good: f64,
+    pub bad: f64,
+    pub poor: f64,
 }
 
 impl JudgeRank {
