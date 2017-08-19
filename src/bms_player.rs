@@ -31,7 +31,7 @@ pub struct BmsPlayer {
     y_offset: f64,
     bpms: Vec<bms_loader::BpmChange>,
     init_time: Option<f64>,
-    textures_map: HashMap<TextureLabel, Texture>,
+    preset_textures: PresetTextures,
     key_mapping: HashMap<Key, bms_loader::Key>,
     bga_textures: Vec<Texture>,
     bga_id: Option<i32>,
@@ -145,7 +145,7 @@ pub fn test_calc_position() {
 
 impl BmsPlayer {
     pub fn new(
-        textures_map: HashMap<TextureLabel, Texture>,
+        preset_textures: PresetTextures,
         bms: Bms,
         time: Time,
         speed: f64,
@@ -225,7 +225,7 @@ impl BmsPlayer {
             y_offset: 0f64,
             bpms: bms.bpms,
             init_time: None,
-            textures_map: textures_map,
+            preset_textures: preset_textures,
             key_mapping: key_mapping,
             bga_textures: bms.textures,
             bga_id: None,
@@ -269,7 +269,8 @@ impl BmsPlayer {
 
         use graphics::*;
 
-        let textures_map = &self.textures_map;
+        let digits = &self.preset_textures.digits;
+        let textures_map = &self.preset_textures.lane_components;
 
         let width = args.width as f64;
         let height = args.height as f64;
@@ -299,13 +300,29 @@ impl BmsPlayer {
         }
 
         let judge_texture = if pt <= self.judge_display.show_until {
-            match self.judge_display.judge {
-                Some(Judge::PGREAT) => Some(TextureLabel::JUDGE_PERFECT),
-                Some(Judge::GREAT) => Some(TextureLabel::JUDGE_GREAT),
-                Some(Judge::GOOD) => Some(TextureLabel::JUDGE_GOOD),
-                Some(Judge::BAD) => Some(TextureLabel::JUDGE_BAD),
-                Some(Judge::POOR) => Some(TextureLabel::JUDGE_POOR),
-                _ => None,
+            let mut x = self.judge_display.combo;
+            let digits = if x > 0 {
+                let mut v = Vec::new();
+                while x > 0 {
+                    v.push(x % 10);
+                    x /= 10;
+                }
+                v.reverse();
+                v
+            } else {
+                Vec::new()
+            };
+
+            if let Some(judge) = self.judge_display.judge {
+                Some((match judge {
+                    Judge::PGREAT => TextureLabel::JUDGE_PERFECT,
+                    Judge::GREAT => TextureLabel::JUDGE_GREAT,
+                    Judge::GOOD => TextureLabel::JUDGE_GOOD,
+                    Judge::BAD => TextureLabel::JUDGE_BAD,
+                    Judge::POOR => TextureLabel::JUDGE_POOR,
+                }, digits))
+            } else {
+                None
             }
         } else { None };
 
@@ -313,7 +330,7 @@ impl BmsPlayer {
         let bga_map = &self.bga_textures;
         let bga = self.bga_id;
 
-        gl.draw(args.viewport(), |c, gl| {
+        gl.draw(args.viewport(), |mut c, gl| {
             // back ground
             let image = Image::new().rect(rectangle::rectangle_by_corners(0.0, 0.0, width, height));
             image.draw(&textures_map[&TextureLabel::BACKGROUND], &DrawState::new_alpha(), c.transform, gl);
@@ -344,9 +361,27 @@ impl BmsPlayer {
             });
 
             // judge
-            if let Some(texture_label) = judge_texture {
-                let image = Image::new().rect(rectangle::rectangle_by_corners(0.0, 0.0, NOTES1_WIDTH * 3.0 + NOTES2_WIDTH * 2.0, NOTES1_WIDTH * 3.0));
-                image.draw(&textures_map[&texture_label], &DrawState::new_alpha(), c.transform.trans(SCR_WIDTH, height / 2.0), gl);
+            if let Some((texture_label, ref combo_digits)) = judge_texture {
+                let (w, h) = textures_map[&texture_label].get_size();
+                let scale = 2.0;
+                let w = w as f64 * scale;
+                let h = h as f64 * scale;
+                let mut combined = CombinedTexture::new();
+                combined.add(TextureDisplay {texture: &textures_map[&texture_label], w: w, h: h});
+
+                for &digit in combo_digits {
+                    let digit = &digits[digit as usize];
+                    // using the width of '0' for all digits to be monospaced...
+                    let (dw, dh) = digits[0usize].get_size();
+                    let scale = h as f64 / dh as f64;
+                    let dw = dw as f64 * scale;
+                    let dh = dh as f64 * scale;
+
+                    combined.add(TextureDisplay {texture: digit, w: dw, h: dh});
+                }
+
+                let lx = (LANE_WIDTH - combined.get_w()) / 2.0;
+                combined.draw(&mut c, gl, lx, 0.7 * height as f64);
             }
         });
     }
@@ -496,6 +531,11 @@ struct DrawInfo {
     pub texture_label: TextureLabel,
 }
 
+pub struct PresetTextures {
+    pub lane_components: HashMap<TextureLabel, Texture>,
+    pub digits: Vec<Texture>,
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TextureLabel {
     BACKGROUND,
@@ -584,5 +624,41 @@ impl JudgeDisplay {
         *self.count.entry(judge).or_insert(0) += 1;
         self.judge = Some(judge);
         self.show_until = t + 1.0;
+    }
+}
+
+struct TextureDisplay<'a> {
+    texture: &'a Texture,
+    w: f64,
+    h: f64,
+}
+
+struct CombinedTexture<'a> {
+    texture_displays: Vec<TextureDisplay<'a>>,
+    total_w: f64,
+}
+
+use graphics::*;
+impl <'a>CombinedTexture<'a> {
+    pub fn new() -> CombinedTexture<'a> {
+        CombinedTexture {texture_displays: vec![], total_w: 0.0}
+    }
+
+    pub fn add(&mut self, texture: TextureDisplay<'a>) {
+        self.total_w += texture.w;
+        self.texture_displays.push(texture);
+    }
+
+    pub fn get_w(&self) -> f64 {
+        self.total_w
+    }
+
+    pub fn draw(&self, c: &mut Context, gl: &mut GlGraphics, x: f64, y: f64) {
+        let mut w = 0.0;
+        for t in &self.texture_displays {
+            let image = Image::new().rect(rectangle::rectangle_by_corners(0.0, 0.0, t.w, t.h));
+            image.draw(t.texture, &DrawState::new_alpha(), c.transform.trans(x + w, y), gl);
+            w += t.w;
+        }
     }
 }

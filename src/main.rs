@@ -188,12 +188,17 @@ fn play_bms(mut window: &mut Window, mut gl: &mut GlGraphics, script_path: Strin
     textures_map.insert(TextureLabel::WHITE_BEAM, Texture::from_path(Path::new("resource/whitebeam.png")).unwrap());
     textures_map.insert(TextureLabel::BLUE_BEAM, Texture::from_path(Path::new("resource/bluebeam.png")).unwrap());
 
+    let mut digits = Vec::new();
+    for i in 0..10 {
+        digits.push(Texture::from_path(Path::new(&format!("resource/{}.png", i))).unwrap());
+    }
+
     let loader = bms_loader::BmsFileLoader::new(&script_path);
 
     use bms_loader::BmsLoader;
     println!("Start loading at {}", time::precise_time_s());
     let mut bms_player = bms_player::BmsPlayer::new(
-        textures_map,
+        bms_player::PresetTextures {lane_components: textures_map, digits: digits},
         loader.load(),
         0.0,
         1.0
